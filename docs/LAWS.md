@@ -134,10 +134,15 @@ Menos átomos com menos PSNR pode ser só andar na curva taxa-distorção. O tes
 | N alvo | sem predação | com predação (θ=0.85) | Δ | vitórias |
 |---|---|---|---|---|
 | 120 | 30.75 dB | **31.05 dB** | **+0.29 dB** | 3/3 |
+| 250 | **33.52 dB** | 31.63 dB | **−1.88 dB** | **0/3** |
 
-Ganho real de representação, não só de taxa — mas **modesto** (+0.29 dB). Em eficiência bruta o efeito é maior: PSNR/átomo sobe de 0.1117 para 0.2402, e o denoise mantém a qualidade com 53 átomos em vez de 90 (**−41%**).
+⚠️ **A LEI SE INVERTE.** A predação paga no regime **esparso** (N=120: +0.29 dB, 3/3) e **prejudica** quando há átomos suficientes (N=250: −1.88 dB, 0/3).
 
-*(N = 250 e 500 ainda rodando quando isto foi escrito; atualizar.)*
+**Interpretação:** com N alto, você *precisa* de átomos coerentes (parcialmente sobrepostos) para representar bem — uma base ortogonal de N elementos não cobre um sinal arbitrário melhor que um frame redundante. Forçar decoerência corta expressividade. Existe um **N crítico** abaixo do qual harmonia > redundância, e acima do qual o contrário.
+
+Isso reconcilia H2: a população **fica coerente por um bom motivo**. A "desarmonia" não é patologia — é capacidade. A predação só ajuda quando a capacidade não é o gargalo (esparso, ou denoise, onde a redundância só serve pra ajustar ruído).
+
+Em eficiência bruta o efeito segue real: PSNR/átomo sobe de 0.1117 para 0.2402, e o denoise mantém a qualidade com 53 átomos em vez de 90 (**−41%**).
 
 ---
 
@@ -148,7 +153,7 @@ A população implementa, sem que ninguém programe:
 1. **AIC** — cada grau de liberdade custa 2σ² (Lei 2, R² 0.99).
 2. **Morozov** — para exatamente no nível de ruído (Lei 4).
 3. **KKT** — utilidade marginal iguala custo marginal (Lei 3).
-4. **Gause** — mas só se a predação for imposta; a harmonia não é espontânea (Lei 6).
+4. **Gause** — mas só se a predação for imposta; a harmonia não é espontânea (Lei 6). E ela **só paga no regime esparso** — no denso, a coerência é capacidade, não patologia (Lei 7).
 
 O que a sobrevivência *não* faz é o ajuste contínuo — isso é do gradiente. A divisão de trabalho medida: **gradiente resolve o contínuo, seleção resolve o discreto** (quantos, quais, onde). É a mesma conclusão da ponte survival↔inteligência, agora com equação.
 

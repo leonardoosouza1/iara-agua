@@ -311,3 +311,10 @@ Predação por nicho (Gause) restaura: θ* ≈ 0.50 é coerência crítica; abai
 c → 1 e a lei vale. A HARMONIA NÃO EMERGE, precisa ser imposta.
 LEI 7 (iso-N): predação ganha +0.29 dB a N igual (3/3 seeds, N=120); PSNR/átomo
 dobra; denoise mantém qualidade com -41% de átomos.
+CORREÇÃO LEI 7 (iso-N completo): predação paga SÓ no esparso. N=120: +0.29 dB (3/3);
+N=250: -1.88 dB (0/3). Com N alto precisa-se de átomos coerentes (frame redundante
+> base ortogonal). A coerência da população é CAPACIDADE, não patologia. Existe N crítico.
+CORREÇÃO LEI 2: inclinação satura em ~2.2 (não 2.007 — aquilo era um orçamento);
+o INTERCEPTO é que converge a 1.0 em qualquer orçamento (âncora teórica).
+LEI 8 REFUTADA por mim: dof_eff via razão de participação erra -44% no 2D; o 1D tem
+posto CHEIO. Causa real do desvio 1D = convergência lenta (c sobe 7.50→8.34).
