@@ -11,6 +11,7 @@ log_every = 50
 snapshot_every = 1000
 
 [world]
+modality = "image"
 target = "synthetic"   # ou caminho de um .png
 size = 64
 
@@ -28,7 +29,7 @@ life_tuning = true     # busca local na geometria durante a vida
 tune_every = 3
 rain_every = 20        # chuva de imigrantes nos hotspots do resíduo
 rain_count = 6
-hotspot_grid = 8
+
 
 [atoms]
 freq_min = 0.015

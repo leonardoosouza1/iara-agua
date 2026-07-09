@@ -1,5 +1,9 @@
 //! agua-life — a física da sobrevivência: seres escoando como água sobre o resíduo.
 //!
+//! GENÉRICA sobre o átomo (`World<A: Atom>`): a MESMA física roda imagem
+//! (Gabor2D), áudio (Gabor1D), vídeo (Gabor3D) e qualquer modalidade futura.
+//! Este crate não sabe o que é pixel, amostra ou frame — só Field/Patch.
+//!
 //! Mundo = sinal-alvo S. Reconstrução = Σ (amp_i · ψ_i) dos seres vivos.
 //! Resíduo r = S − reconstrução. Comida do ser = energia que o SEU átomo
 //! explica do resíduo-sem-ele (utilidade marginal). Sem comida → morre e o
@@ -11,8 +15,8 @@
 //! de utilidade por átomo. Metabolismo alto = codificação enxuta e grossa;
 //! baixo = população grande e detalhista.
 
-use agua_atoms::{fit_amp, AtomBounds, Gabor2D};
-use agua_core::{psnr, sample_hotspot, Field2D, Patch, Rng};
+use agua_atoms::{fit_amp, Atom, AtomBounds};
+use agua_core::{psnr, unflatten, Field, HotspotSampler, Patch, Rng};
 use serde::{Deserialize, Serialize};
 
 /// Parâmetros da dinâmica de vida (vem do TOML do experimento).
@@ -44,8 +48,6 @@ pub struct LifeConfig {
     pub rain_every: u64,
     /// quantos imigrantes por chuva
     pub rain_count: usize,
-    /// resolução da grade de hotspots (grid×grid blocos)
-    pub hotspot_grid: usize,
 }
 
 impl Default for LifeConfig {
@@ -64,16 +66,15 @@ impl Default for LifeConfig {
             tune_every: 3,
             rain_every: 20,
             rain_count: 6,
-            hotspot_grid: 8,
         }
     }
 }
 
 /// Um ser vivo: átomo + patch unitário cacheado + amplitude + energia.
 #[derive(Debug)]
-pub struct Being {
+pub struct Being<A: Atom> {
     pub id: u64,
-    pub atom: Gabor2D,
+    pub atom: A,
     pub unit: Patch,
     /// ||ψ||² cacheado
     pub n2: f32,
@@ -84,19 +85,19 @@ pub struct Being {
 
 /// Snapshot serializável da população — a própria CODIFICAÇÃO do sinal.
 #[derive(Serialize)]
-pub struct BeingRecord {
+pub struct BeingRecord<A: Atom> {
     pub id: u64,
-    pub atom: Gabor2D,
+    pub atom: A,
     pub amp: f32,
     pub energy: f32,
     pub age: u64,
 }
 
-pub struct World {
-    pub target: Field2D,
-    pub recon: Field2D,
-    pub residual: Field2D,
-    pub beings: Vec<Being>,
+pub struct World<A: Atom> {
+    pub target: Field,
+    pub recon: Field,
+    pub residual: Field,
+    pub beings: Vec<Being<A>>,
     pub rng: Rng,
     pub tick: u64,
     pub cfg: LifeConfig,
@@ -106,13 +107,12 @@ pub struct World {
     next_id: u64,
 }
 
-impl World {
-    /// `target` deve estar zero-médio (o DC é side-info de 4 bytes; Gabors
-    /// têm média ~0 e não modelam DC). PSNR é idêntico com ou sem o DC.
-    pub fn new(target: Field2D, cfg: LifeConfig, bounds: AtomBounds, seed: u64) -> Self {
-        let (w, h) = (target.w, target.h);
+impl<A: Atom> World<A> {
+    /// `target` deve estar zero-médio (o DC é side-info de 4 bytes; átomos
+    /// oscilatórios têm média ~0). PSNR é idêntico com ou sem o DC.
+    pub fn new(target: Field, cfg: LifeConfig, bounds: AtomBounds, seed: u64) -> Self {
         let mut world = World {
-            recon: Field2D::zeros(w, h),
+            recon: Field::zeros(&target.dims),
             residual: target.clone(),
             target,
             beings: Vec::new(),
@@ -130,19 +130,27 @@ impl World {
 
     /// Chuva: nascem seres em posições ∝ resíduo² (a água cai onde falta).
     fn rain(&mut self, count: usize) {
+        if count == 0 || self.beings.len() >= self.cfg.cap {
+            return;
+        }
+        let sampler = HotspotSampler::new(&self.residual);
         for _ in 0..count {
             if self.beings.len() >= self.cfg.cap {
                 return;
             }
-            let (x, y) = sample_hotspot(&self.residual, &mut self.rng, self.cfg.hotspot_grid);
-            let atom = Gabor2D::rain_at(x as f32, y as f32, &self.bounds, &mut self.rng);
+            let idx = sampler.sample(&mut self.rng);
+            let pos: Vec<f32> = unflatten(&self.target.dims, idx)
+                .into_iter()
+                .map(|v| v as f32)
+                .collect();
+            let atom = A::rain_at(&pos, &self.bounds, &mut self.rng);
             self.spawn(atom);
         }
     }
 
     /// Nasce um ser: amp ajustada em forma fechada contra o resíduo atual.
-    fn spawn(&mut self, atom: Gabor2D) -> bool {
-        let unit = atom.render_unit(self.target.w, self.target.h);
+    fn spawn(&mut self, atom: A) -> bool {
+        let unit = atom.render_unit(&self.target.dims);
         let n2 = unit.norm2();
         if n2 < 1e-4 {
             return false;
@@ -177,8 +185,7 @@ impl World {
     /// Busca local sem gradiente: propõe geometria mutada; troca se explicar
     /// mais o resíduo-sem-ele (com histerese de 2% pra não thrashar).
     fn try_tune(&mut self, i: usize) {
-        let (w, h) = (self.target.w, self.target.h);
-        let (cand, d_cur, u_cur, amp_old) = {
+        let (cand, u_cur, amp_old) = {
             let b = &self.beings[i];
             let d_cur = b.unit.dot_field(&self.residual) + b.amp * b.n2;
             let u_cur = d_cur * d_cur / b.n2;
@@ -186,13 +193,11 @@ impl World {
                 &mut self.rng,
                 self.cfg.mutation_sigma,
                 &self.bounds,
-                w as f32,
-                h as f32,
+                &self.target.dims,
             );
-            (cand, d_cur, u_cur, b.amp)
+            (cand, u_cur, b.amp)
         };
-        let _ = d_cur;
-        let cu = cand.render_unit(w, h);
+        let cu = cand.render_unit(&self.target.dims);
         let cn2 = cu.norm2();
         if cn2 < 1e-4 {
             return;
@@ -262,7 +267,6 @@ impl World {
         }
 
         // 4. reprodução: pais ricos geram filhos mutados perto de si
-        let (w, h) = (self.target.w as f32, self.target.h as f32);
         let parents: Vec<usize> = (0..self.beings.len())
             .filter(|&i| self.beings[i].energy >= self.cfg.repro_threshold)
             .collect();
@@ -271,10 +275,12 @@ impl World {
                 break;
             }
             self.beings[i].energy -= self.cfg.repro_cost;
-            let child =
-                self.beings[i]
-                    .atom
-                    .mutate(&mut self.rng, self.cfg.mutation_sigma, &self.bounds, w, h);
+            let child = self.beings[i].atom.mutate(
+                &mut self.rng,
+                self.cfg.mutation_sigma,
+                &self.bounds,
+                &self.target.dims,
+            );
             self.spawn(child);
         }
 
@@ -291,7 +297,7 @@ impl World {
 
     /// Recalcula recon = Σ patches e residual = target − recon (mata deriva f32).
     pub fn rebuild(&mut self) {
-        let mut recon = Field2D::zeros(self.target.w, self.target.h);
+        let mut recon = Field::zeros(&self.target.dims);
         for b in &self.beings {
             recon.add_scaled_patch(&b.unit, b.amp);
         }
@@ -315,23 +321,24 @@ impl World {
     }
 
     pub fn psnr(&self, peak: f32) -> f32 {
-        let mse = self.residual.energy() / (self.target.w * self.target.h) as f32;
+        let mse = self.residual.energy() / self.target.len() as f32;
         psnr(mse, peak)
     }
 
     /// Custo em bytes da codificação atual (params f32 por ser).
     pub fn bytes(&self) -> usize {
-        self.beings.len() * Gabor2D::PARAMS * 4
+        self.beings.len() * A::PARAMS * 4
     }
 
-    /// Histograma da população por banda de frequência (limiares em ciclos/px).
+    /// Histograma da população por banda de frequência característica.
     /// Mede se a pirâmide grosso→fino emerge sozinha.
     pub fn freq_bands(&self, edges: &[f32]) -> Vec<usize> {
         let mut bands = vec![0usize; edges.len() + 1];
         for b in &self.beings {
+            let f = b.atom.freq();
             let mut k = edges.len();
             for (i, e) in edges.iter().enumerate() {
-                if b.atom.freq < *e {
+                if f < *e {
                     k = i;
                     break;
                 }
@@ -341,7 +348,7 @@ impl World {
         bands
     }
 
-    pub fn population_records(&self) -> Vec<BeingRecord> {
+    pub fn population_records(&self) -> Vec<BeingRecord<A>> {
         self.beings
             .iter()
             .map(|b| BeingRecord {
@@ -358,11 +365,12 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agua_atoms::{Gabor1D, Gabor2D};
 
-    fn synthetic(size: usize) -> Field2D {
+    fn synthetic_2d(size: usize) -> Field {
         // alvo multi-escala zero-médio: blob suave + listras finas
         let s = size as f32;
-        let mut f = Field2D::from_fn(size, size, |x, y| {
+        let mut f = Field::from_fn_2d(size, size, |x, y| {
             let (xf, yf) = (x as f32, y as f32);
             let blob = 0.6
                 * (-((xf - s * 0.3).powi(2) + (yf - s * 0.3).powi(2)) / (2.0 * (s * 0.15).powi(2)))
@@ -381,13 +389,32 @@ mod tests {
         f
     }
 
+    fn synthetic_1d(n: usize) -> Field {
+        let mut f = Field::from_fn_1d(n, |i| {
+            let t = i as f32;
+            let low = 0.4 * (std::f32::consts::TAU * 0.004 * t).sin();
+            let burst = if i > n / 3 && i < n / 2 {
+                0.3 * (std::f32::consts::TAU * 0.08 * t).sin()
+            } else {
+                0.0
+            };
+            low + burst
+        });
+        let m = f.mean();
+        for v in f.data.iter_mut() {
+            *v -= m;
+        }
+        f
+    }
+
     fn bounds() -> AtomBounds {
         AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 16.0 }
     }
 
     #[test]
     fn invariant_holds_over_ticks() {
-        let mut w = World::new(synthetic(32), LifeConfig::default(), bounds(), 11);
+        let mut w: World<Gabor2D> =
+            World::new(synthetic_2d(32), LifeConfig::default(), bounds(), 11);
         for _ in 0..60 {
             w.step();
         }
@@ -395,8 +422,9 @@ mod tests {
     }
 
     #[test]
-    fn survival_improves_psnr() {
-        let mut w = World::new(synthetic(48), LifeConfig::default(), bounds(), 22);
+    fn survival_improves_psnr_image() {
+        let mut w: World<Gabor2D> =
+            World::new(synthetic_2d(48), LifeConfig::default(), bounds(), 22);
         let p0 = w.psnr(1.0);
         for _ in 0..300 {
             w.step();
@@ -406,10 +434,26 @@ mod tests {
         assert!(p1 > p0 + 1.0, "psnr não subiu: {p0:.2} → {p1:.2}");
     }
 
+    /// O teste do AGNOSTICISMO: a MESMA física resolve um sinal 1D (áudio).
+    #[test]
+    fn survival_improves_psnr_audio() {
+        let mut w: World<Gabor1D> =
+            World::new(synthetic_1d(2048), LifeConfig::default(), bounds(), 33);
+        let p0 = w.psnr(1.0);
+        for _ in 0..300 {
+            w.step();
+        }
+        let p1 = w.psnr(1.0);
+        assert!(w.beings.len() > 4, "população colapsou: {}", w.beings.len());
+        assert!(p1 > p0 + 1.0, "psnr não subiu: {p0:.2} → {p1:.2}");
+        assert!(w.invariant_error() < 1e-3);
+    }
+
     #[test]
     fn deterministic_same_seed() {
         let mk = || {
-            let mut w = World::new(synthetic(32), LifeConfig::default(), bounds(), 77);
+            let mut w: World<Gabor2D> =
+                World::new(synthetic_2d(32), LifeConfig::default(), bounds(), 77);
             for _ in 0..100 {
                 w.step();
             }

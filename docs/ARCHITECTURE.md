@@ -4,9 +4,9 @@
 
 | Visão (`IARA_VISAO_SERES_COMO_AGUA.md`) | Código |
 |---|---|
-| Mundo / relevo | `Field2D target` (zero-médio; DC = 4 bytes de side-info) |
+| Mundo / relevo (AGNÓSTICO) | `Field { dims, data }` N-dim flat (zero-médio; DC = 4 bytes de side-info) |
 | Comida / energia | utilidade marginal: energia que o átomo explica do resíduo-sem-ele |
-| Ser / átomo / alfinete | `Being { Gabor2D, unit: Patch, amp, energy }` |
+| Ser / átomo / alfinete | `Being<A: Atom> { atom, unit: Patch, amp, energy }` — Gabor1D/2D/3D |
 | Reconstrução | `recon = Σ amp_i · ψ_i` (mantida incremental, patches esparsos) |
 | Sobreviver = reduzir erro | `energy += food_gain·explicado − metabolism`; ≤0 → morre, patch volta pro resíduo |
 | Água escoando | chuva de imigrantes em hotspots ∝ resíduo² + reprodução com mutação |
@@ -19,6 +19,15 @@
 2. **Determinismo:** mesma seed → mesmo mundo, bit a bit (RNG próprio xorshift64*, zero `rand`/`Instant` na física; teste `deterministic_same_seed`).
 3. **Amplitude nunca evolui:** `amp* = ⟨r,ψ⟩/‖ψ‖²` em forma fechada (o ser "bebe"). Sobrevivência só esculpe GEOMETRIA — comparação limpa com matching pursuit.
 4. **Metabolismo = dial taxa-distorção:** ser sobrevive sse explica > `metabolism/food_gain` de energia. Sobe o metabolismo → codificação enxuta; desce → detalhista.
+
+## Agnosticismo de modalidade (implementado)
+
+- `Patch` = lista de **runs contíguos no índice flat** — uma linha de imagem, um intervalo de áudio, uma linha de um frame de vídeo. `dot_field`/`dot_patch`/`add_scaled_patch` funcionam pra qualquer dimensionalidade (two-pointer sobre runs ordenados).
+- `agua-life::World<A: Atom>` é genérico: a física NÃO conhece modalidade. O trait `Atom` (em `agua-atoms`) exige `rain_at(pos)`, `mutate`, `render_unit(dims)`, `freq()`. Nova modalidade = novo átomo, física intocada (o teste `survival_improves_psnr_audio` prova: mesma config resolve 1D).
+- Baselines `random_atoms`/`matching_pursuit` também genéricos — comparação sempre na MESMA família de átomos do experimento.
+- Hotspot = amostrador exato ∝ v² (prefix-sum + busca binária), N-dimensional por construção.
+- IO por modalidade vive em `agua-lab` (dispatch) + `agua-telemetry` (PNG, WAV PCM16 reader/writer próprio, waveform PNG). Vídeo v0: alvo sintético; frames PNG na bateria.
+- Texto/latente (F4): átomo em espaço de embedding com comida = casar com prior importado — o trait já comporta (Field = matriz de embeddings flat).
 
 ## Decisões de design
 

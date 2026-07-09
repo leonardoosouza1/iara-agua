@@ -1,8 +1,14 @@
 //! agua-core — primitivas fundamentais do solver-por-sobrevivência.
 //!
 //! Zero dependências externas. Tudo determinístico: RNG próprio seedado,
-//! sem `Instant`/`random` escondidos. Este crate NÃO sabe o que é um átomo
-//! nem o que é sobrevivência — só campos 2D, patches esparsos e amostragem.
+//! sem `Instant`/`random` escondidos. Este crate NÃO sabe o que é um átomo,
+//! sobrevivência ou modalidade — só campos N-dimensionais flat, patches
+//! esparsos por runs e amostragem ponderada.
+//!
+//! AGNOSTICISMO: `Field` guarda `dims` (row-major, dims[0] mais lento) e
+//! dados flat. `Patch` é uma lista de runs contíguos no índice flat — uma
+//! linha de imagem, um intervalo de áudio, uma linha de um frame de vídeo.
+//! A física de vida opera só nisso; a modalidade vive nos átomos.
 
 /// RNG xorshift64* — determinístico, barato, seedável.
 #[derive(Clone, Debug)]
@@ -73,37 +79,55 @@ impl Rng {
     }
 }
 
-/// Campo escalar 2D denso (o sinal, a reconstrução, o resíduo).
+/// Campo escalar N-dimensional denso, row-major (o sinal, a reconstrução,
+/// o resíduo). dims[0] é o eixo mais lento (2D: [h,w]; 3D: [t,h,w]).
 #[derive(Clone, Debug)]
-pub struct Field2D {
-    pub w: usize,
-    pub h: usize,
+pub struct Field {
+    pub dims: Vec<usize>,
     pub data: Vec<f32>,
 }
 
-impl Field2D {
-    pub fn zeros(w: usize, h: usize) -> Self {
-        Field2D { w, h, data: vec![0.0; w * h] }
+impl Field {
+    pub fn zeros(dims: &[usize]) -> Self {
+        let len = dims.iter().product();
+        Field { dims: dims.to_vec(), data: vec![0.0; len] }
     }
 
-    pub fn from_fn(w: usize, h: usize, f: impl Fn(usize, usize) -> f32) -> Self {
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    /// Conveniência 1D (áudio): f(i).
+    pub fn from_fn_1d(n: usize, f: impl Fn(usize) -> f32) -> Self {
+        Field { dims: vec![n], data: (0..n).map(f).collect() }
+    }
+
+    /// Conveniência 2D (imagem): f(x, y), dims [h, w].
+    pub fn from_fn_2d(h: usize, w: usize, f: impl Fn(usize, usize) -> f32) -> Self {
         let mut data = Vec::with_capacity(w * h);
         for y in 0..h {
             for x in 0..w {
                 data.push(f(x, y));
             }
         }
-        Field2D { w, h, data }
+        Field { dims: vec![h, w], data }
     }
 
-    #[inline]
-    pub fn at(&self, x: usize, y: usize) -> f32 {
-        self.data[y * self.w + x]
-    }
-
-    #[inline]
-    pub fn at_mut(&mut self, x: usize, y: usize) -> &mut f32 {
-        &mut self.data[y * self.w + x]
+    /// Conveniência 3D (vídeo): f(x, y, t), dims [t, h, w].
+    pub fn from_fn_3d(t: usize, h: usize, w: usize, f: impl Fn(usize, usize, usize) -> f32) -> Self {
+        let mut data = Vec::with_capacity(t * h * w);
+        for ti in 0..t {
+            for y in 0..h {
+                for x in 0..w {
+                    data.push(f(x, y, ti));
+                }
+            }
+        }
+        Field { dims: vec![t, h, w], data }
     }
 
     /// Energia total (soma dos quadrados).
@@ -115,67 +139,89 @@ impl Field2D {
         self.data.iter().sum::<f32>() / self.data.len() as f32
     }
 
-    pub fn mse_vs(&self, other: &Field2D) -> f32 {
-        assert_eq!(self.data.len(), other.data.len());
-        self.data
-            .iter()
-            .zip(&other.data)
-            .map(|(a, b)| (a - b) * (a - b))
-            .sum::<f32>()
-            / self.data.len() as f32
-    }
-
     /// Soma `k * patch` no campo (k = +amp pra aplicar, -amp pra remover).
     pub fn add_scaled_patch(&mut self, p: &Patch, k: f32) {
-        for py in 0..p.h {
-            let row = (p.y0 + py) * self.w + p.x0;
-            let prow = py * p.w;
-            for px in 0..p.w {
-                self.data[row + px] += k * p.data[prow + px];
+        let mut off = 0usize;
+        for run in &p.runs {
+            let dst = &mut self.data[run.field_start..run.field_start + run.len];
+            let src = &p.data[off..off + run.len];
+            for (d, s) in dst.iter_mut().zip(src) {
+                *d += k * s;
             }
+            off += run.len;
         }
     }
 }
 
-/// Patch esparso: contribuição local de um átomo (janela retangular).
+/// Converte índice flat → coordenadas por eixo (na ordem de dims).
+pub fn unflatten(dims: &[usize], mut i: usize) -> Vec<usize> {
+    let mut out = vec![0usize; dims.len()];
+    for d in (0..dims.len()).rev() {
+        out[d] = i % dims[d];
+        i /= dims[d];
+    }
+    out
+}
+
+/// Um trecho contíguo do índice flat do campo.
+#[derive(Clone, Debug)]
+pub struct Run {
+    pub field_start: usize,
+    pub len: usize,
+}
+
+/// Patch esparso: contribuição local de um átomo como runs contíguos
+/// (ordenados por field_start, sem sobreposição interna). `data` concatena
+/// os valores na ordem dos runs.
 #[derive(Clone, Debug)]
 pub struct Patch {
-    pub x0: usize,
-    pub y0: usize,
-    pub w: usize,
-    pub h: usize,
+    pub runs: Vec<Run>,
     pub data: Vec<f32>,
 }
 
 impl Patch {
     /// ⟨patch, campo restrito ao suporte⟩.
-    pub fn dot_field(&self, f: &Field2D) -> f32 {
+    pub fn dot_field(&self, f: &Field) -> f32 {
         let mut acc = 0.0f32;
-        for py in 0..self.h {
-            let row = (self.y0 + py) * f.w + self.x0;
-            let prow = py * self.w;
-            for px in 0..self.w {
-                acc += self.data[prow + px] * f.data[row + px];
+        let mut off = 0usize;
+        for run in &self.runs {
+            let src = &f.data[run.field_start..run.field_start + run.len];
+            let pd = &self.data[off..off + run.len];
+            for (a, b) in pd.iter().zip(src) {
+                acc += a * b;
             }
+            off += run.len;
         }
         acc
     }
 
     /// ⟨self, other⟩ sobre a interseção dos suportes (0 se não sobrepõem).
+    /// Two-pointer sobre runs ordenados por field_start.
     pub fn dot_patch(&self, other: &Patch) -> f32 {
-        let x0 = self.x0.max(other.x0);
-        let y0 = self.y0.max(other.y0);
-        let x1 = (self.x0 + self.w).min(other.x0 + other.w);
-        let y1 = (self.y0 + self.h).min(other.y0 + other.h);
-        if x1 <= x0 || y1 <= y0 {
-            return 0.0;
-        }
         let mut acc = 0.0f32;
-        for y in y0..y1 {
-            let srow = (y - self.y0) * self.w + (x0 - self.x0);
-            let orow = (y - other.y0) * other.w + (x0 - other.x0);
-            for i in 0..(x1 - x0) {
-                acc += self.data[srow + i] * other.data[orow + i];
+        let (mut i, mut j) = (0usize, 0usize);
+        let (mut aoff, mut boff) = (0usize, 0usize);
+        while i < self.runs.len() && j < other.runs.len() {
+            let ra = &self.runs[i];
+            let rb = &other.runs[j];
+            let ae = ra.field_start + ra.len;
+            let be = rb.field_start + rb.len;
+            let s = ra.field_start.max(rb.field_start);
+            let e = ae.min(be);
+            if s < e {
+                let ai = aoff + (s - ra.field_start);
+                let bi = boff + (s - rb.field_start);
+                for k in 0..(e - s) {
+                    acc += self.data[ai + k] * other.data[bi + k];
+                }
+            }
+            if ae <= be {
+                aoff += ra.len;
+                i += 1;
+            }
+            if be <= ae {
+                boff += rb.len;
+                j += 1;
             }
         }
         acc
@@ -187,39 +233,34 @@ impl Patch {
     }
 }
 
-/// Amostra uma posição ∝ energia local do campo (blocos grid×grid).
-/// É a "comida sobrando": onde o resíduo é alto, chove ser novo.
-pub fn sample_hotspot(f: &Field2D, rng: &mut Rng, grid: usize) -> (usize, usize) {
-    let grid = grid.max(1).min(f.w.min(f.h));
-    let bw = (f.w + grid - 1) / grid;
-    let bh = (f.h + grid - 1) / grid;
-    let mut weights = vec![0.0f32; grid * grid];
-    for y in 0..f.h {
-        for x in 0..f.w {
-            let v = f.at(x, y);
-            weights[(y / bh).min(grid - 1) * grid + (x / bw).min(grid - 1)] += v * v;
+/// Amostrador ponderado ∝ valor² do campo — a "comida sobrando": onde o
+/// resíduo é alto, chove ser novo. Exato (prefix-sum + busca binária),
+/// construir 1× por chuva.
+pub struct HotspotSampler {
+    prefix: Vec<f32>,
+    total: f32,
+}
+
+impl HotspotSampler {
+    pub fn new(f: &Field) -> Self {
+        let mut prefix = Vec::with_capacity(f.len());
+        let mut acc = 0.0f32;
+        for v in &f.data {
+            acc += v * v;
+            prefix.push(acc);
         }
+        HotspotSampler { prefix, total: acc }
     }
-    let total: f32 = weights.iter().sum();
-    let block = if total <= 1e-12 {
-        rng.usize(grid * grid)
-    } else {
-        let mut r = rng.f32() * total;
-        let mut chosen = grid * grid - 1;
-        for (i, w) in weights.iter().enumerate() {
-            if r < *w {
-                chosen = i;
-                break;
-            }
-            r -= w;
+
+    /// Índice flat amostrado ∝ v² (uniforme se campo ~zerado).
+    pub fn sample(&self, rng: &mut Rng) -> usize {
+        let n = self.prefix.len();
+        if self.total <= 1e-12 || n == 0 {
+            return rng.usize(n.max(1));
         }
-        chosen
-    };
-    let bx = block % grid;
-    let by = block / grid;
-    let x = (bx * bw + rng.usize(bw)).min(f.w - 1);
-    let y = (by * bh + rng.usize(bh)).min(f.h - 1);
-    (x, y)
+        let r = rng.f32() * self.total;
+        self.prefix.partition_point(|p| *p <= r).min(n - 1)
+    }
 }
 
 /// PSNR em dB dado MSE e pico do sinal.
@@ -254,43 +295,70 @@ mod tests {
         }
     }
 
+    fn rect_patch(x0: usize, y0: usize, w: usize, h: usize, fw: usize, val: f32) -> Patch {
+        let mut runs = Vec::new();
+        let mut data = Vec::new();
+        for y in y0..y0 + h {
+            runs.push(Run { field_start: y * fw + x0, len: w });
+            for _ in 0..w {
+                data.push(val);
+            }
+        }
+        Patch { runs, data }
+    }
+
     #[test]
     fn patch_roundtrip_zeroes() {
-        let mut f = Field2D::zeros(16, 16);
-        let p = Patch {
-            x0: 3,
-            y0: 5,
-            w: 4,
-            h: 4,
-            data: (0..16).map(|i| i as f32 * 0.1).collect(),
-        };
+        let mut f = Field::zeros(&[16, 16]);
+        let p = rect_patch(3, 5, 4, 4, 16, 0.7);
         f.add_scaled_patch(&p, 2.5);
         f.add_scaled_patch(&p, -2.5);
         assert!(f.data.iter().all(|v| v.abs() < 1e-6));
     }
 
     #[test]
-    fn dot_patch_overlap() {
-        let a = Patch { x0: 0, y0: 0, w: 2, h: 2, data: vec![1.0; 4] };
-        let b = Patch { x0: 1, y0: 1, w: 2, h: 2, data: vec![3.0; 4] };
-        // interseção = 1 pixel → 1*3
+    fn dot_patch_overlap_2d() {
+        // interseção 1 pixel (canto) → 1*3
+        let a = rect_patch(0, 0, 2, 2, 16, 1.0);
+        let b = rect_patch(1, 1, 2, 2, 16, 3.0);
         assert!((a.dot_patch(&b) - 3.0).abs() < 1e-6);
-        let c = Patch { x0: 10, y0: 10, w: 2, h: 2, data: vec![1.0; 4] };
+        let c = rect_patch(10, 10, 2, 2, 16, 1.0);
         assert_eq!(a.dot_patch(&c), 0.0);
+        // consistência com dot_field
+        let mut f = Field::zeros(&[16, 16]);
+        f.add_scaled_patch(&b, 1.0);
+        assert!((a.dot_field(&f) - a.dot_patch(&b)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dot_patch_1d_interval() {
+        let a = Patch { runs: vec![Run { field_start: 5, len: 4 }], data: vec![2.0; 4] };
+        let b = Patch { runs: vec![Run { field_start: 7, len: 4 }], data: vec![1.5; 4] };
+        // interseção = índices 7,8 → 2*(2.0*1.5)
+        assert!((a.dot_patch(&b) - 6.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn unflatten_roundtrip() {
+        let dims = [3usize, 4, 5];
+        assert_eq!(unflatten(&dims, 0), vec![0, 0, 0]);
+        assert_eq!(unflatten(&dims, 59), vec![2, 3, 4]);
+        assert_eq!(unflatten(&dims, 27), vec![1, 1, 2]); // 1*20 + 1*5 + 2
     }
 
     #[test]
     fn hotspot_prefers_energy() {
         // energia concentrada no canto inferior direito
-        let f = Field2D::from_fn(32, 32, |x, y| if x >= 24 && y >= 24 { 10.0 } else { 0.0 });
+        let f = Field::from_fn_2d(32, 32, |x, y| if x >= 24 && y >= 24 { 10.0 } else { 0.0 });
         let mut rng = Rng::new(1);
+        let sampler = HotspotSampler::new(&f);
         let mut hits = 0;
         for _ in 0..200 {
-            let (x, y) = sample_hotspot(&f, &mut rng, 8);
-            if x >= 24 && y >= 24 {
+            let c = unflatten(&f.dims, sampler.sample(&mut rng));
+            if c[1] >= 24 && c[0] >= 24 {
                 hits += 1;
             }
         }
-        assert!(hits > 180, "hotspot ignorou a energia: {hits}/200");
+        assert_eq!(hits, 200, "sampler exato deve cair só onde há energia");
     }
 }

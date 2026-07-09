@@ -4,17 +4,22 @@
 > Modelo caro (Fable) fez F0; fases seguintes são executáveis por modelo mais barato
 > seguindo `docs/EXPERIMENT_PROTOCOL.md`.
 
-## ✅ F0 — Fundação (2026-07-09, Fable)
-Workspace 6 crates, física de sobrevivência v0, baselines, telemetria, 15 testes, smoke validado.
-**Aceite (batido):** `cargo test` verde; demo 800 ticks: PSNR 15.8→26.9 dB, bate random (+5.4 dB), ecologia com turnover (781 nasc/381 mortes), artefatos completos, JOURNAL appendado.
+## ✅ F0 — Fundação multimodal (2026-07-09, Fable)
+Workspace 6 crates, física de sobrevivência GENÉRICA (`World<A: Atom>`, Field N-dim, Patch por runs), átomos Gabor 1D/2D/3D, IO WAV/PNG/frames, baselines genéricos, telemetria, 23 testes, smoke das 3 modalidades.
+**Aceite (batido):** `cargo test` 23/23; demos com MESMA física e MESMA config default:
+- imagem 800 ticks: 17.5→25.9 dB (random 22.3, MP 35.6)
+- áudio 800 ticks: 11.3→14.3 dB — **bateu MP (12.8)** e random (11.6); .wav ouvível exportado
+- vídeo 400 ticks: 18.7→29.0 dB — **bateu MP (27.2)** e random (20.8)
+(nota honesta: MP aqui é single-pass sem refit; sobrevivência tem relaxação contínua — em áudio/vídeo isso já paga. 1 seed; bateria confirma.)
 
-## F1 — Ciência: imagem-por-sobrevivência (bateria ~50 runs) ← PRÓXIMA
-A pergunta da visão §5: seleção sem gradiente chega perto do matching pursuit? A pirâmide emerge?
-- Sweep: `metabolism` (dial taxa-distorção) × `cap` × `mutation_sigma` × `life_tuning on/off` × `tune_every` × ticks longos (20k+).
+## F1 — Ciência: bateria multimodal (~50 runs/modalidade) ← PRÓXIMA
+A pergunta da visão §5: seleção sem gradiente chega perto (ou bate) o matching pursuit? A pirâmide emerge?
+- **Imagem (exp001):** sweep `metabolism` (dial taxa-distorção) × `cap` × `mutation_sigma` × `life_tuning on/off` × `tune_every` × ticks longos (20k+). Alvos: sintético + ≥2 PNGs reais 64×64 e 128×128 (fotos com textura fina).
+- **Áudio (exp002):** WAVs reais (fala PT + música, PCM16) + sintético; bounds de grão longo (sigma_max 400). O smoke já bateu MP — validar multi-seed e contra MP com mais candidatos.
+- **Vídeo (exp003):** carregar sequência de frames PNG (implementar no lab, ~20 linhas); medir se seres "surfam" o movimento (freq_t > 0 na população) vs viram estáticos.
 - `life_tuning off` = evolução pura (só chuva+reprodução) — mede quanto o ajuste-de-vida paga (liga com lote 4 da ponte: aprender>evoluir).
-- Alvos: sintético + ≥2 PNGs reais 64×64 e 128×128 (fotos com textura fina).
-- Pirâmide: plotar `freq_bands` ao longo do tempo — grosso primeiro, fino depois? (no demo v0 as bandas finas ficaram sub-povoadas [284,90,16,6,4] — investigar: metabolismo alto demais pro átomo fino? chuva enviesada?)
-- **Aceite:** multi-seed (≥3) com veredito honesto: gap médio pro MP em dB; curva taxa-distorção sobrevivência vs random vs MP vs JPEG; resposta sim/não da pirâmide. Registrar TUDO no JOURNAL.md.
+- Pirâmide: plotar `freq_bands` ao longo do tempo — grosso primeiro, fino depois? (no demo imagem as bandas finas ficaram sub-povoadas [284,90,16,6,4] — investigar: metabolismo alto demais pro átomo fino? chuva enviesada?)
+- **Aceite:** multi-seed (≥3) com veredito honesto POR MODALIDADE: gap médio pro MP em dB; curva taxa-distorção vs random/MP/JPEG; resposta sim/não da pirâmide. Registrar TUDO no JOURNAL.md.
 
 ## F2 — Órgãos temporais + harmonia explícita
 - Portar `CfCCell` (teste de paridade numérica vs `Universe/src/cfc.rs`) → átomo com dinâmica temporal (sinal que muda no tempo; a ressonância freq↔decay já validada nas baterias 10/12 entra aqui).
@@ -22,10 +27,9 @@ A pergunta da visão §5: seleção sem gradiente chega perto do matching pursui
 - Reuso: GA/niching de `iara-swarm/crates/iara-evolution`.
 - **Aceite:** átomo temporal reconstrói sinal 2D+t melhor que átomo estático (multi-seed).
 
-## F3 — Agnosticismo de modalidade (áudio 1D)
-- `Field1D` + grão de Gabor 1D; `agua-life` INTACTO (é o teste: a física não pode mudar).
-- Alvo: trechos de áudio reais (fala PT + música), PSNR/SNR vs MP 1D.
-- **Aceite:** mesma física resolve 2 modalidades; diff de `agua-life` = zero linhas.
+## ✅ F3 (antecipada pra F0) — Agnosticismo de modalidade
+Feito na fundação: Field N-dim, Patch por runs, `World<A: Atom>` genérico, Gabor1D/2D/3D, WAV IO, alvos sintéticos das 3 modalidades, demos validados. `agua-life` tem ZERO conhecimento de modalidade (teste `survival_improves_psnr_audio` prova).
+**Resta (vai pra F1):** alvos REAIS de áudio (WAV fala/música) e vídeo (frames PNG) nas baterias.
 
 ## F4 — Prior importado → GERAÇÃO
 - O diferencial não-diferenciável: átomo/comida definidos por um MODELO (byte-model/latent), onde gradiente não serve.

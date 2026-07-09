@@ -3,12 +3,15 @@
 //! Regra do protocolo: nenhum resultado de sobrevivência é reportado sem
 //! (a) random-atoms (piso: mesma família, geometria aleatória),
 //! (b) matching pursuit (teto guloso: melhor-de-C candidatos por passo),
-//! (c) JPEG (referência de mundo real em bytes×PSNR).
+//! (c) JPEG (referência de mundo real em bytes×PSNR, só imagem).
 //! Sobrevivência que não bate (a) é ruído; distância pra (b) mede o custo
 //! de não ter gradiente/ganância global.
+//!
+//! random_atoms e matching_pursuit são GENÉRICOS sobre o átomo — valem pra
+//! qualquer modalidade, sempre com a MESMA família de funções do experimento.
 
-use agua_atoms::{fit_amp, AtomBounds, Gabor2D};
-use agua_core::{psnr, sample_hotspot, Field2D, Rng};
+use agua_atoms::{fit_amp, Atom, AtomBounds};
+use agua_core::{psnr, unflatten, Field, HotspotSampler, Rng};
 use serde::Serialize;
 
 /// Ponto taxa-distorção de um método.
@@ -20,14 +23,10 @@ pub struct RdPoint {
     pub psnr_db: f32,
 }
 
-fn atom_bytes(n: usize) -> usize {
-    n * Gabor2D::PARAMS * 4
-}
-
 /// Piso: N átomos com geometria aleatória (posição uniforme), amp em forma
 /// fechada, adicionados sequencialmente. Curva em checkpoints.
-pub fn random_atoms(
-    target: &Field2D,
+pub fn random_atoms<A: Atom>(
+    target: &Field,
     n: usize,
     bounds: &AtomBounds,
     seed: u64,
@@ -38,20 +37,23 @@ pub fn random_atoms(
     let mut out = Vec::new();
     let mut placed = 0usize;
     for k in 1..=n {
-        let x = rng.range(0.0, (target.w - 1) as f32);
-        let y = rng.range(0.0, (target.h - 1) as f32);
-        let g = Gabor2D::rain_at(x, y, bounds, &mut rng);
-        let unit = g.render_unit(target.w, target.h);
+        let idx = rng.usize(target.len());
+        let pos: Vec<f32> = unflatten(&target.dims, idx)
+            .into_iter()
+            .map(|v| v as f32)
+            .collect();
+        let g = A::rain_at(&pos, bounds, &mut rng);
+        let unit = g.render_unit(&target.dims);
         if let Some((amp, _)) = fit_amp(&unit, &residual) {
             residual.add_scaled_patch(&unit, -amp);
             placed += 1;
         }
         if checkpoints.contains(&k) {
-            let mse = residual.energy() / (target.w * target.h) as f32;
+            let mse = residual.energy() / target.len() as f32;
             out.push(RdPoint {
                 label: "random".into(),
                 atoms: placed,
-                bytes: atom_bytes(placed),
+                bytes: placed * A::PARAMS * 4,
                 psnr_db: psnr(mse, 1.0),
             });
         }
@@ -61,8 +63,8 @@ pub fn random_atoms(
 
 /// Teto guloso (matching pursuit estocástico): a cada passo amostra C
 /// candidatos em hotspots do resíduo e adiciona o que mais explica.
-pub fn matching_pursuit(
-    target: &Field2D,
+pub fn matching_pursuit<A: Atom>(
+    target: &Field,
     n: usize,
     candidates: usize,
     bounds: &AtomBounds,
@@ -73,11 +75,16 @@ pub fn matching_pursuit(
     let mut residual = target.clone();
     let mut out = Vec::new();
     for k in 1..=n {
+        let sampler = HotspotSampler::new(&residual);
         let mut best: Option<(f32, f32, agua_core::Patch)> = None; // (explicado, amp, unit)
         for _ in 0..candidates {
-            let (x, y) = sample_hotspot(&residual, &mut rng, 8);
-            let g = Gabor2D::rain_at(x as f32, y as f32, bounds, &mut rng);
-            let unit = g.render_unit(target.w, target.h);
+            let idx = sampler.sample(&mut rng);
+            let pos: Vec<f32> = unflatten(&target.dims, idx)
+                .into_iter()
+                .map(|v| v as f32)
+                .collect();
+            let g = A::rain_at(&pos, bounds, &mut rng);
+            let unit = g.render_unit(&target.dims);
             if let Some((amp, explained)) = fit_amp(&unit, &residual) {
                 if best.as_ref().map_or(true, |(e, _, _)| explained > *e) {
                     best = Some((explained, amp, unit));
@@ -88,11 +95,11 @@ pub fn matching_pursuit(
             residual.add_scaled_patch(&unit, -amp);
         }
         if checkpoints.contains(&k) {
-            let mse = residual.energy() / (target.w * target.h) as f32;
+            let mse = residual.energy() / target.len() as f32;
             out.push(RdPoint {
                 label: "matching_pursuit".into(),
                 atoms: k,
-                bytes: atom_bytes(k),
+                bytes: k * A::PARAMS * 4,
                 psnr_db: psnr(mse, 1.0),
             });
         }
@@ -100,10 +107,11 @@ pub fn matching_pursuit(
     out
 }
 
-/// Referência mundo-real: JPEG em várias qualidades (bytes reais do arquivo).
-/// `target` em [0,1] (com DC), vira Luma8, roundtrip encode→decode→PSNR.
-pub fn jpeg_curve(target: &Field2D, qualities: &[u8]) -> Vec<RdPoint> {
-    let (w, h) = (target.w as u32, target.h as u32);
+/// Referência mundo-real (só imagem 2D): JPEG em várias qualidades
+/// (bytes reais do arquivo). `target` em [0,1] (com DC), dims [h, w].
+pub fn jpeg_curve(target: &Field, qualities: &[u8]) -> Vec<RdPoint> {
+    assert_eq!(target.dims.len(), 2, "jpeg_curve é só pra imagem 2D");
+    let (h, w) = (target.dims[0] as u32, target.dims[1] as u32);
     let raw: Vec<u8> = target
         .data
         .iter()
@@ -148,10 +156,12 @@ pub fn jpeg_curve(target: &Field2D, qualities: &[u8]) -> Vec<RdPoint> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agua_atoms::{Gabor1D, Gabor2D};
 
-    fn target() -> Field2D {
-        let mut f = Field2D::from_fn(48, 48, |x, y| {
-            0.5 + 0.4 * (std::f32::consts::TAU * 0.05 * x as f32).sin()
+    fn target_2d() -> Field {
+        let mut f = Field::from_fn_2d(48, 48, |x, y| {
+            0.5 + 0.4
+                * (std::f32::consts::TAU * 0.05 * x as f32).sin()
                 * (std::f32::consts::TAU * 0.03 * y as f32).cos()
         });
         let m = f.mean();
@@ -167,8 +177,8 @@ mod tests {
 
     #[test]
     fn mp_monotonic_improvement() {
-        let t = target();
-        let pts = matching_pursuit(&t, 40, 12, &bounds(), 3, &[10, 20, 40]);
+        let t = target_2d();
+        let pts = matching_pursuit::<Gabor2D>(&t, 40, 12, &bounds(), 3, &[10, 20, 40]);
         assert_eq!(pts.len(), 3);
         assert!(pts[1].psnr_db >= pts[0].psnr_db - 0.01);
         assert!(pts[2].psnr_db >= pts[1].psnr_db - 0.01);
@@ -177,16 +187,37 @@ mod tests {
 
     #[test]
     fn mp_beats_random() {
-        let t = target();
-        let mp = matching_pursuit(&t, 30, 12, &bounds(), 5, &[30]);
-        let rnd = random_atoms(&t, 30, &bounds(), 5, &[30]);
-        assert!(mp[0].psnr_db > rnd[0].psnr_db, "MP {:.1} <= random {:.1}", mp[0].psnr_db, rnd[0].psnr_db);
+        let t = target_2d();
+        let mp = matching_pursuit::<Gabor2D>(&t, 30, 12, &bounds(), 5, &[30]);
+        let rnd = random_atoms::<Gabor2D>(&t, 30, &bounds(), 5, &[30]);
+        assert!(
+            mp[0].psnr_db > rnd[0].psnr_db,
+            "MP {:.1} <= random {:.1}",
+            mp[0].psnr_db,
+            rnd[0].psnr_db
+        );
+    }
+
+    #[test]
+    fn mp_works_on_audio_1d() {
+        let mut t = Field::from_fn_1d(2048, |i| {
+            0.5 * (std::f32::consts::TAU * 0.01 * i as f32).sin()
+        });
+        let m = t.mean();
+        for v in t.data.iter_mut() {
+            *v -= m;
+        }
+        let p0 = psnr(t.energy() / t.len() as f32, 1.0);
+        // áudio precisa de envelope longo (grão que cobre períodos do tom grave)
+        let b = AtomBounds { freq_min: 0.002, freq_max: 0.45, sigma_min: 2.0, sigma_max: 400.0 };
+        let pts = matching_pursuit::<Gabor1D>(&t, 60, 24, &b, 7, &[60]);
+        assert!(pts[0].psnr_db > p0 + 3.0, "MP 1D não melhorou: {:.1} vs {:.1}", pts[0].psnr_db, p0);
     }
 
     #[test]
     fn jpeg_roundtrip_sane() {
         // JPEG precisa do DC — usa alvo em [0,1]
-        let f = Field2D::from_fn(48, 48, |x, y| {
+        let f = Field::from_fn_2d(48, 48, |x, y| {
             0.5 + 0.3 * (std::f32::consts::TAU * 0.04 * (x + y) as f32).sin()
         });
         let pts = jpeg_curve(&f, &[30, 80]);

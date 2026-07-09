@@ -2,17 +2,29 @@
 //!
 //! Uso:
 //!   agua-lab run --config configs/exp001_image_survival.toml [--out .] [--seed N] [--ticks N]
-//!   agua-lab demo                        # smoke rápido com alvo sintético
+//!   agua-lab demo          # smoke imagem sintética
+//!   agua-lab demo-audio    # smoke áudio sintético
+//!   agua-lab demo-video    # smoke vídeo sintético
+//!
+//! Modalidades ([world].modality): "image" (PNG/sintético), "audio"
+//! (WAV PCM16/sintético), "video" (sintético). A física é a MESMA
+//! (`World<A: Atom>`); muda só o átomo e o IO.
 //!
 //! Cada run gera runs/<exp>/run-<ts>-s<seed>/ (manifest, metrics.jsonl,
 //! snapshots, population.json, summary.json) e appenda 1 linha no JOURNAL.md.
 
-use agua_atoms::AtomBounds;
+use agua_atoms::{Atom, AtomBounds, Gabor1D, Gabor2D, Gabor3D};
+use agua_core::Field;
 use agua_life::{LifeConfig, World};
 use agua_metrics::{jpeg_curve, matching_pursuit, random_atoms, RdPoint};
-use agua_telemetry::{git_hash, journal_append, unix_now, RunDir};
+use agua_telemetry::{
+    git_hash, journal_append, load_wav, save_wav, unix_now, waveform_png, RunDir,
+};
 use serde::Deserialize;
 use std::path::Path;
+
+mod targets;
+use targets::{synthetic_audio, synthetic_image, synthetic_video};
 
 #[derive(Deserialize, Clone)]
 struct Config {
@@ -31,14 +43,34 @@ struct ExperimentCfg {
     snapshot_every: u64,
 }
 
-#[derive(Deserialize, Clone)]
-struct WorldCfg {
-    /// "synthetic" ou caminho de um PNG (vira grayscale, redimensiona pra size)
-    target: String,
-    size: usize,
+fn default_modality() -> String {
+    "image".into()
+}
+fn default_frames() -> usize {
+    16
+}
+fn default_sample_rate() -> u32 {
+    16000
 }
 
-/// Bandas de frequência (ciclos/px) pro histograma da pirâmide.
+#[derive(Deserialize, Clone)]
+struct WorldCfg {
+    /// "image" | "audio" | "video"
+    #[serde(default = "default_modality")]
+    modality: String,
+    /// "synthetic" ou caminho (.png pra image, .wav PCM16 pra audio)
+    target: String,
+    /// image/video: lado; audio: nº de amostras
+    size: usize,
+    /// video: nº de frames
+    #[serde(default = "default_frames")]
+    frames: usize,
+    /// audio: taxa pro WAV exportado (e truncagem do carregado)
+    #[serde(default = "default_sample_rate")]
+    sample_rate: u32,
+}
+
+/// Bandas de frequência (ciclos/amostra) pro histograma da pirâmide.
 const BAND_EDGES: [f32; 4] = [0.03, 0.06, 0.12, 0.24];
 
 fn main() {
@@ -61,16 +93,16 @@ fn main() {
                 cfg.experiment.max_ticks = t.parse().expect("--ticks inteiro");
             }
             for seed in cfg.experiment.seeds.clone() {
-                run_one(&cfg, &toml_src, seed, Path::new(&out));
+                dispatch(&cfg, &toml_src, seed, Path::new(&out));
             }
         }
-        Some("demo") => {
-            let cfg = demo_config();
-            let toml_src = "# demo builtin".to_string();
-            run_one(&cfg, &toml_src, 42, Path::new("."));
-        }
+        Some("demo") => demo("image", 800),
+        Some("demo-audio") => demo("audio", 800),
+        Some("demo-video") => demo("video", 400),
         _ => {
-            eprintln!("uso: agua-lab run --config <toml> [--out dir] [--seed N] [--ticks N] | agua-lab demo");
+            eprintln!(
+                "uso: agua-lab run --config <toml> [--out dir] [--seed N] [--ticks N] | demo | demo-audio | demo-video"
+            );
             std::process::exit(2);
         }
     }
@@ -82,51 +114,64 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
         .and_then(|i| args.get(i + 1).cloned())
 }
 
-fn demo_config() -> Config {
-    Config {
+fn demo(modality: &str, ticks: u64) {
+    let (size, frames) = match modality {
+        "audio" => (4096, 0),
+        "video" => (48, 12),
+        _ => (64, 0),
+    };
+    let cfg = Config {
         experiment: ExperimentCfg {
-            name: "demo".into(),
+            name: format!("demo-{modality}"),
             seeds: vec![42],
-            max_ticks: 800,
+            max_ticks: ticks,
             log_every: 50,
-            snapshot_every: 200,
+            snapshot_every: ticks / 4,
         },
-        world: WorldCfg { target: "synthetic".into(), size: 64 },
+        world: WorldCfg {
+            modality: modality.into(),
+            target: "synthetic".into(),
+            size,
+            frames,
+            sample_rate: 16000,
+        },
         life: LifeConfig::default(),
         atoms: AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 24.0 },
+    };
+    dispatch(&cfg, "# demo builtin", 42, Path::new("."));
+}
+
+/// Dispatch de modalidade: escolhe átomo + IO; a física é a mesma.
+fn dispatch(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
+    match cfg.world.modality.as_str() {
+        "image" => {
+            let target_dc = load_image_target(&cfg.world);
+            run_generic::<Gabor2D>(cfg, toml_src, seed, out_root, target_dc, Viz::Image);
+        }
+        "audio" => {
+            let target_dc = load_audio_target(&cfg.world);
+            run_generic::<Gabor1D>(
+                cfg,
+                toml_src,
+                seed,
+                out_root,
+                target_dc,
+                Viz::Audio { sample_rate: cfg.world.sample_rate },
+            );
+        }
+        "video" => {
+            let target_dc = load_video_target(&cfg.world);
+            run_generic::<Gabor3D>(cfg, toml_src, seed, out_root, target_dc, Viz::Video);
+        }
+        m => panic!("modalidade desconhecida: {m} (use image|audio|video)"),
     }
 }
 
-/// Alvo sintético multi-escala determinístico: gradiente suave (baixa freq) +
-/// blob gaussiano (média) + listras finas num quadrante (alta freq) + quadrado
-/// de borda dura. Testa exatamente a claim "a pirâmide emerge".
-fn synthetic_target(size: usize) -> agua_core::Field2D {
-    let s = size as f32;
-    agua_core::Field2D::from_fn(size, size, |x, y| {
-        let (xf, yf) = (x as f32, y as f32);
-        let grad = 0.25 * (std::f32::consts::TAU * xf / s * 0.5).sin()
-            * (std::f32::consts::TAU * yf / s * 0.5).cos();
-        let blob = 0.45
-            * (-((xf - s * 0.3).powi(2) + (yf - s * 0.32).powi(2))
-                / (2.0 * (s * 0.12).powi(2)))
-            .exp();
-        let stripes = if xf > s * 0.55 && yf > s * 0.55 {
-            0.22 * (std::f32::consts::TAU * 0.22 * xf).sin()
-        } else {
-            0.0
-        };
-        let square = if (xf - s * 0.7).abs() < s * 0.09 && (yf - s * 0.25).abs() < s * 0.09 {
-            0.3
-        } else {
-            0.0
-        };
-        (0.45 + grad + blob + stripes + square).clamp(0.0, 1.0)
-    })
-}
+// ─────────────────────────── carregamento de alvos ───────────────────────────
 
-fn load_target(wcfg: &WorldCfg) -> agua_core::Field2D {
+fn load_image_target(wcfg: &WorldCfg) -> Field {
     if wcfg.target == "synthetic" {
-        return synthetic_target(wcfg.size);
+        return synthetic_image(wcfg.size);
     }
     let img = image::open(&wcfg.target)
         .unwrap_or_else(|e| panic!("abrindo alvo {}: {e}", wcfg.target))
@@ -136,23 +181,100 @@ fn load_target(wcfg: &WorldCfg) -> agua_core::Field2D {
             image::imageops::FilterType::CatmullRom,
         )
         .to_luma8();
-    agua_core::Field2D {
-        w: wcfg.size,
-        h: wcfg.size,
+    Field {
+        dims: vec![wcfg.size, wcfg.size],
         data: img.as_raw().iter().map(|v| *v as f32 / 255.0).collect(),
     }
 }
+
+fn load_audio_target(wcfg: &WorldCfg) -> Field {
+    if wcfg.target == "synthetic" {
+        return synthetic_audio(wcfg.size);
+    }
+    let (samples, _sr) =
+        load_wav(Path::new(&wcfg.target)).unwrap_or_else(|e| panic!("abrindo {}: {e}", wcfg.target));
+    let n = wcfg.size.min(samples.len());
+    Field { dims: vec![n], data: samples[..n].to_vec() }
+}
+
+fn load_video_target(wcfg: &WorldCfg) -> Field {
+    if wcfg.target == "synthetic" {
+        return synthetic_video(wcfg.frames, wcfg.size);
+    }
+    panic!("vídeo v0 só suporta target = \"synthetic\" (carregar frames PNG entra na bateria de vídeo)");
+}
+
+// ─────────────────────────── visualização por modalidade ───────────────────────────
+
+enum Viz {
+    Image,
+    Audio { sample_rate: u32 },
+    Video,
+}
+
+impl Viz {
+    /// Salva a visualização de um campo (com DC) nos snapshots do run.
+    fn save(&self, rd: &RunDir, name: &str, f: &Field, signed: bool) {
+        match self {
+            Viz::Image => {
+                if signed {
+                    rd.save_signed_png(&format!("{name}.png"), f, 0.5).unwrap();
+                } else {
+                    rd.save_field_png(&format!("{name}.png"), f).unwrap();
+                }
+            }
+            Viz::Audio { .. } => {
+                waveform_png(&rd.snapshot_path(&format!("{name}.png")), &f.data, 512, 128)
+                    .unwrap();
+            }
+            Viz::Video => {
+                // primeiro / meio / último frame
+                let t = f.dims[0];
+                for (tag, ti) in [("f0", 0usize), ("fm", t / 2), ("fl", t - 1)] {
+                    let frame = video_frame(f, ti);
+                    if signed {
+                        rd.save_signed_png(&format!("{name}_{tag}.png"), &frame, 0.5).unwrap();
+                    } else {
+                        rd.save_field_png(&format!("{name}_{tag}.png"), &frame).unwrap();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Export final extra (áudio: WAVs ouvíveis do alvo e da reconstrução).
+    fn export_final(&self, rd: &RunDir, target_dc: &Field, recon_dc: &Field) {
+        if let Viz::Audio { sample_rate } = self {
+            save_wav(&rd.snapshot_path("target.wav"), &target_dc.data, *sample_rate).unwrap();
+            save_wav(&rd.snapshot_path("recon.wav"), &recon_dc.data, *sample_rate).unwrap();
+        }
+    }
+}
+
+fn video_frame(f: &Field, t: usize) -> Field {
+    let (h, w) = (f.dims[1], f.dims[2]);
+    let start = t * h * w;
+    Field { dims: vec![h, w], data: f.data[start..start + h * w].to_vec() }
+}
+
+// ─────────────────────────── o run genérico (física única) ───────────────────────────
 
 fn rd_json(p: &RdPoint) -> serde_json::Value {
     serde_json::json!({"label": p.label, "atoms": p.atoms, "bytes": p.bytes, "psnr_db": p.psnr_db})
 }
 
-fn run_one(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
+fn run_generic<A: Atom>(
+    cfg: &Config,
+    toml_src: &str,
+    seed: u64,
+    out_root: &Path,
+    target_dc: Field,
+    viz: Viz,
+) {
     let exp = &cfg.experiment;
     let t_start = std::time::Instant::now();
 
-    // alvo com DC (pra JPEG/snapshots) e versão zero-média (pro mundo)
-    let target_dc = load_target(&cfg.world);
+    // alvo com DC (pra viz/JPEG) e versão zero-média (pro mundo)
     let dc = target_dc.mean();
     let mut target = target_dc.clone();
     for v in target.data.iter_mut() {
@@ -165,19 +287,29 @@ fn run_one(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
         "seed": seed,
         "created_unix": unix_now(),
         "git": git_hash(out_root),
-        "world": {"target": cfg.world.target, "size": cfg.world.size, "dc": dc},
+        "world": {
+            "modality": cfg.world.modality,
+            "target": cfg.world.target,
+            "dims": target.dims,
+            "dc": dc,
+        },
         "max_ticks": exp.max_ticks,
     }))
     .unwrap();
     rd.copy_config(toml_src).unwrap();
-    rd.save_field_png("target.png", &target_dc).unwrap();
+    viz.save(&rd, "target", &target_dc, false);
 
-    let mut world = World::new(target.clone(), cfg.life.clone(), cfg.atoms.clone(), seed);
+    let mut world: World<A> = World::new(target.clone(), cfg.life.clone(), cfg.atoms.clone(), seed);
     let mut best_psnr = world.psnr(1.0);
 
     println!(
-        "▶ {} seed={} | alvo {}x{} | pop inicial {} | psnr0 {:.2} dB",
-        exp.name, seed, cfg.world.size, cfg.world.size, world.beings.len(), best_psnr
+        "▶ {} seed={} [{}] | dims {:?} | pop inicial {} | psnr0 {:.2} dB",
+        exp.name,
+        seed,
+        cfg.world.modality,
+        target.dims,
+        world.beings.len(),
+        best_psnr
     );
 
     for tick in 1..=exp.max_ticks {
@@ -198,14 +330,10 @@ fn run_one(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
             }))
             .unwrap();
         }
-        if tick % exp.snapshot_every == 0 {
-            let mut recon_dc = world.recon.clone();
-            for v in recon_dc.data.iter_mut() {
-                *v += dc;
-            }
-            rd.save_field_png(&format!("recon_{tick:06}.png"), &recon_dc).unwrap();
-            rd.save_signed_png(&format!("residual_{tick:06}.png"), &world.residual, 0.5)
-                .unwrap();
+        if exp.snapshot_every > 0 && tick % exp.snapshot_every == 0 {
+            let recon_dc = with_dc(&world.recon, dc);
+            viz.save(&rd, &format!("recon_{tick:06}"), &recon_dc, false);
+            viz.save(&rd, &format!("residual_{tick:06}"), &world.residual, true);
         }
     }
 
@@ -215,22 +343,23 @@ fn run_one(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
     let bytes = world.bytes();
     let wall = t_start.elapsed().as_secs_f32();
 
-    // ---- baselines honestos com o MESMO número de átomos ----
+    // ---- baselines honestos com o MESMO número de átomos e MESMA família ----
     let n = alive.max(1);
-    let cps = [n / 4, n / 2, n]
-        .iter()
-        .copied()
-        .filter(|v| *v > 0)
-        .collect::<Vec<_>>();
-    let rnd = random_atoms(&target, n, &cfg.atoms, seed ^ 0xABCD, &cps);
-    let mp = matching_pursuit(&target, n, 24, &cfg.atoms, seed ^ 0x1234, &cps);
-    let jpeg = jpeg_curve(&target_dc, &[10, 30, 50, 70, 90]);
+    let cps: Vec<usize> = [n / 4, n / 2, n].iter().copied().filter(|v| *v > 0).collect();
+    let rnd = random_atoms::<A>(&target, n, &cfg.atoms, seed ^ 0xABCD, &cps);
+    let mp = matching_pursuit::<A>(&target, n, 24, &cfg.atoms, seed ^ 0x1234, &cps);
+    let jpeg = if cfg.world.modality == "image" {
+        jpeg_curve(&target_dc, &[10, 30, 50, 70, 90])
+    } else {
+        Vec::new()
+    };
     let rnd_final = rnd.last().map(|p| p.psnr_db).unwrap_or(0.0);
     let mp_final = mp.last().map(|p| p.psnr_db).unwrap_or(0.0);
 
     rd.write_population(&serde_json::to_value(world.population_records()).unwrap())
         .unwrap();
     rd.write_summary(&serde_json::json!({
+        "modality": cfg.world.modality,
         "final_psnr_db": final_psnr,
         "best_psnr_db": best_psnr,
         "alive": alive,
@@ -248,32 +377,31 @@ fn run_one(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
     }))
     .unwrap();
 
-    // snapshot final
-    let mut recon_dc = world.recon.clone();
-    for v in recon_dc.data.iter_mut() {
-        *v += dc;
-    }
-    rd.save_field_png("recon_final.png", &recon_dc).unwrap();
-    rd.save_signed_png("residual_final.png", &world.residual, 0.5).unwrap();
+    // visualização final
+    let recon_dc = with_dc(&world.recon, dc);
+    viz.save(&rd, "recon_final", &recon_dc, false);
+    viz.save(&rd, "residual_final", &world.residual, true);
+    viz.export_final(&rd, &target_dc, &recon_dc);
 
-    println!(
-        "✔ {} seed={} | {:.1}s | psnr {:.2} dB ({} seres, {} B) | random {:.2} | MP {:.2} | jpeg: {}",
-        exp.name,
-        seed,
-        wall,
-        final_psnr,
-        alive,
-        bytes,
-        rnd_final,
-        mp_final,
+    let jpeg_str = if jpeg.is_empty() {
+        "n/a".to_string()
+    } else {
         jpeg.iter()
-            .map(|p| format!("q?{}B={:.1}dB", p.bytes, p.psnr_db))
+            .map(|p| format!("{}B={:.1}dB", p.bytes, p.psnr_db))
             .collect::<Vec<_>>()
             .join(" ")
+    };
+    println!(
+        "✔ {} seed={} | {:.1}s | psnr {:.2} dB ({} seres, {} B) | random {:.2} | MP {:.2} | jpeg: {}",
+        exp.name, seed, wall, final_psnr, alive, bytes, rnd_final, mp_final, jpeg_str
     );
 
     let verdict = if final_psnr > rnd_final + 0.5 {
-        format!("bate random (+{:.2} dB), gap MP {:.2} dB", final_psnr - rnd_final, mp_final - final_psnr)
+        format!(
+            "bate random (+{:.2} dB), gap MP {:.2} dB",
+            final_psnr - rnd_final,
+            mp_final - final_psnr
+        )
     } else {
         "NÃO bate random — ruído".to_string()
     };
@@ -294,4 +422,12 @@ fn run_one(cfg: &Config, toml_src: &str, seed: u64, out_root: &Path) {
         ),
     )
     .unwrap();
+}
+
+fn with_dc(f: &Field, dc: f32) -> Field {
+    let mut out = f.clone();
+    for v in out.data.iter_mut() {
+        *v += dc;
+    }
+    out
 }
