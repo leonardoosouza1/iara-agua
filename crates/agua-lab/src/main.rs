@@ -31,6 +31,7 @@ mod law3;
 mod law4;
 mod law5;
 mod law6;
+mod law7;
 mod targets;
 use targets::{synthetic_audio, synthetic_image, synthetic_video};
 
@@ -280,6 +281,10 @@ fn main() {
         Some("law6") => {
             let seed: u64 = flag_value(&args, "--seed").map_or(11, |v| v.parse().unwrap());
             law6::run(seed);
+        }
+        Some("law7") => {
+            let seed: u64 = flag_value(&args, "--seed").map_or(11, |v| v.parse().unwrap());
+            law7::run(seed);
         }
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),

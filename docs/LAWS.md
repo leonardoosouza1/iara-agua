@@ -21,20 +21,28 @@ Um ser vive sse arranca do resíduo mais energia do que custa existir. Em ruído
 
 ---
 
-## LEI 2 — c = 1 + 2·dof ⟺ **Critério de Akaike** ⭐
+## LEI 2 — c = 1 + a·dof, com a ≈ 2 (⟺ penalidade do **AIC**) ⭐
 
-Medida limpa dentro da fase harmônica (ver Lei 6), congelando parâmetros um a um:
+Medida limpa dentro da fase harmônica (ver Lei 6), congelando parâmetros um a um. A **primeira medida** (200 ticks) deu:
 
 $$c \;=\; 2{,}007\,\cdot\,\text{dof} \;+\; 1{,}067 \qquad (R^2 = 0{,}9912)$$
 
-- **Intercepto 1.07**: um átomo que não busca nada captura exatamente 1·σ² (a âncora teórica; medido isoladamente: 1.13).
-- **Inclinação 2.007**: cada grau de liberdade otimizado custa **2σ²**.
+⚠️ **Correção obrigatória (não celebrar cedo demais).** `c` também cresce com o orçamento de busca (Lei 1). Então testei se a *inclinação* é robusta ou se aquele 2.007 foi acidente do orçamento:
 
-Dois por parâmetro é literalmente a penalidade do **AIC** (`−2 log L + 2k`). Ninguém programou isso. Portanto:
+| ticks | inclinação a | intercepto b | R² |
+|---|---|---|---|
+| 50 | 1.370 | 1.598 | 0.969 |
+| 200 | **2.023** | 1.142 | 0.993 |
+| 800 | **2.243** | 0.889 | 0.992 |
+| 3000 | **2.187** | 0.980 | 0.993 |
 
-$$\boxed{\;\text{met}_c \;=\; \sigma^2\,\bigl(1 + 2\,\text{dof}\bigr)\;}$$
+**O que sobrevive:**
+- **Intercepto → 1.0**, em *qualquer* orçamento (1.14, 0.89, 0.98). É a âncora teórica: um átomo que não busca captura 1·σ², e mais tempo não muda isso. Medido isoladamente: 1.13. ✅
+- **Inclinação satura em ~2.2** (2.02–2.24 na busca convergida). Cada grau de liberdade otimizado custa ≈2σ².
 
-**O metabolismo crítico é o AIC, emergindo de fome e morte.** Seleção natural fazendo seleção de modelo.
+$$\boxed{\;\text{met}_c \;\approx\; \sigma^2\,\bigl(1 + 2\,\text{dof}\bigr)\;}$$
+
+Dois por parâmetro é a penalidade do **AIC** (`−2 log L + 2k`) — ninguém programou isso; emerge de fome e morte. **Ressalva honesta: a medida (2.02–2.24) é consistente com 2, mas não o distingue de 2.2.** O valor exato 2.007 foi de um orçamento específico e não deve ser citado como "o" número.
 
 ---
 
@@ -99,6 +107,23 @@ Essa colinearidade **infla os coeficientes** (como preditores colineares em regr
 **θ\* ≈ 0.50** (60° entre átomos). Abaixo: população harmônica, âncora recuperada, lei válida. Acima: colinearidade, coeficientes inflados. Análogo às transições de fase de Donoho–Tanner em compressed sensing.
 
 **A harmonia não emerge — precisa ser imposta por predação.** Foi essa a intuição do Leonardo ("seres que eliminam outros ou viram energia") e ela estava certa.
+
+---
+
+## LEI 8 — dof efetivo: hipótese **refutada**
+
+A Lei 2 bate no Gabor2D (dof 6) mas o Gabor1D (dof 4) fica ~17% abaixo do previsto, sistematicamente. Hipótese: os parâmetros do 1D são degenerados (mover o centro ≈ mudar a fase), então o que conta é o posto do Jacobiano.
+
+**Medida independente** (razão de participação dos autovalores da Gram de ∂ψ/∂p):
+
+| átomo | dof nominal | dof_eff medido | (c−1)/2 esperado | erro |
+|---|---|---|---|---|
+| Gabor2D | 6 | 3.39 | 6.10 | **−44%** |
+| Gabor1D | 4 | 2.71 | 3.25 | −17% |
+
+❌ **Refutada.** E não troquei de métrica até alguma bater (isso seria p-hacking). O espectro da Gram mostra que o **1D tem posto 4 cheio** ([1.00, 0.51, 0.50, 0.015]) e é até *menos* desigual que o 2D ([1.00, 0.38, 0.37, 0.35, 0.099, 0.008]) — a degenerescência não existe.
+
+**Explicação alternativa, essa sim sustentada:** o 1D só converge mais devagar. Com mais orçamento, `c_1D` sobe 7.50 → 7.87 → 8.22 → **8.34**, rumo a 9. O desvio era falta de convergência, não falta de graus de liberdade.
 
 ---
 

@@ -16,7 +16,7 @@
 //! PREDIÇÃO DE FORMA: cada parâmetro livre acrescenta uma direção de busca.
 //! Se as direções fossem independentes, c cresceria linearmente com dof.
 
-use agua_atoms::{AtomBounds, Gabor2D};
+use agua_atoms::{Atom, AtomBounds, Gabor1D, Gabor2D};
 use agua_core::{Field, Rng};
 use agua_life::{LifeConfig, World};
 
@@ -31,6 +31,18 @@ fn c_of(dims: &[usize], b: &AtomBounds, seed: u64, frozen: u32, comp: usize, tic
 }
 
 fn c_of_pred(
+    dims: &[usize],
+    b: &AtomBounds,
+    seed: u64,
+    frozen: u32,
+    comp: usize,
+    ticks: u64,
+    pred: f32,
+) -> f32 {
+    c_generic::<Gabor2D>(dims, b, seed, frozen, comp, ticks, pred)
+}
+
+fn c_generic<A: Atom>(
     dims: &[usize],
     b: &AtomBounds,
     seed: u64,
@@ -55,7 +67,7 @@ fn c_of_pred(
     c.repro_threshold = 1e9;
     c.predation = pred;
     c.predation_every = 5;
-    let mut w: World<Gabor2D> = World::new(campo, c, b.clone(), seed);
+    let mut w: World<A> = World::new(campo, c, b.clone(), seed);
     for _ in 0..ticks {
         w.step();
     }
@@ -176,4 +188,58 @@ pub fn run(seed: u64) {
     println!("   intercepto {b0:.2} vs âncora teórica 1.00  →  {}",
         if (b0 - 1.0).abs() < 0.6 { "TEORIA FECHA" } else { "ainda há viés" });
     println!("   ganho por grau de liberdade: {a:.2}");
+
+    // ── PREDIÇÃO CROSS-MODAL (a mais forte): c = 1 + 2·dof ───────────────
+    // Gabor2D tem 6 graus ⇒ prevê c = 13 (medido acima: {:.2}).
+    // Gabor1D (áudio) tem 4 graus ⇒ prevê c = 9. NUNCA medido na fase harmônica.
+    println!("\n=== PREDIÇÃO CROSS-MODAL: a lei c = 1 + 2·dof atravessa modalidade? ===");
+    let b1 = AtomBounds { freq_min: 0.002, freq_max: 0.45, sigma_min: 2.0, sigma_max: 400.0 };
+    println!("{:>12} {:>6} {:>12} {:>12} {:>10}", "átomo", "dof", "c predito", "c medido", "erro");
+    let c2 = c_generic::<Gabor2D>(&dims, &b, seed, 0, 1, 200, 0.3);
+    println!("{:>12} {:>6} {:>12.1} {:>12.2} {:>9.1}%", "Gabor2D (img)", 6, 13.0, c2, 100.0 * (c2 - 13.0) / 13.0);
+    for &n in &[4096usize, 8192] {
+        let c1 = c_generic::<Gabor1D>(&[n], &b1, seed, 0, 1, 200, 0.3);
+        println!("{:>12} {:>6} {:>12.1} {:>12.2} {:>9.1}%", format!("Gabor1D n={n}"), 4, 9.0, c1, 100.0 * (c1 - 9.0) / 9.0);
+    }
+    // e o 1D com um parâmetro congelado ⇒ dof=3 ⇒ prevê c = 7
+    let c1f = c_generic::<Gabor1D>(&[4096], &b1, seed, 0b1000, 1, 200, 0.3);
+    println!("{:>12} {:>6} {:>12.1} {:>12.2} {:>9.1}%", "Gabor1D −σ", 3, 7.0, c1f, 100.0 * (c1f - 7.0) / 7.0);
+
+    // ── O 1D NÃO SATUROU? c cresce com o orçamento de busca (Lei 1). ─────
+    // A Gram mostrou posto 4 CHEIO no 1D ⇒ não é degenerescência.
+    // Hipótese alternativa: o Adam em 1D converge mais devagar; c ainda subindo.
+    // PREDIÇÃO: dando mais ticks, c_1D → 9 (e c_2D fica em 13, já saturado).
+    println!("\n=== O DESVIO DO 1D É FALTA DE CONVERGÊNCIA? (c cresce com a busca) ===");
+    println!("{:>8} {:>16} {:>16}", "ticks", "c Gabor1D (→9?)", "c Gabor2D (→13?)");
+    for &t in &[200u64, 600, 1500, 3000] {
+        let a = c_generic::<Gabor1D>(&[4096], &b1, seed, 0, 1, t, 0.3);
+        let bb = c_generic::<Gabor2D>(&dims, &b, seed, 0, 1, t, 0.3);
+        println!("{t:>8} {a:>16.2} {bb:>16.2}");
+    }
+    println!("\nSe c_1D sobe pra ~9 e c_2D fica em ~13, a lei c=1+2·dof vale");
+    println!("ASSINTOTICAMENTE (busca saturada) e o 1D só era lento.\n");
+
+    // ── TESTE DECISIVO: o "2" da lei é robusto, ou coincidência do orçamento? ──
+    // c cresce com ln(orçamento) [Lei 1] E com dof [Lei 2]. Se a INCLINAÇÃO em
+    // dof for ≈2 em vários orçamentos, a penalidade-por-parâmetro é real (AIC).
+    // Se a inclinação crescer com o orçamento, o "2.007" foi acidente de M=200.
+    println!("=== O \"2\" É LEI OU COINCIDÊNCIA DO ORÇAMENTO? ===");
+    println!("Ajusta c = a·dof + b em CADA orçamento. Se a ≈ 2 sempre ⇒ AIC robusto.\n");
+    println!("{:>8} {:>12} {:>12} {:>10} {:>34}", "ticks", "inclinação a", "intercepto b", "R²", "leitura");
+    for &t in &[50u64, 200, 800, 3000] {
+        let mut xs = Vec::new();
+        let mut ys = Vec::new();
+        for &(m, dof, _) in &masks {
+            if dof % 2 == 1 && dof != 1 {
+                continue; // amostra dof = 0,1,2,4,6 (barateia)
+            }
+            xs.push(dof as f32);
+            ys.push(c_of_pred(&dims, &b, seed, m, 1, t, 0.3));
+        }
+        let (a, b0, r2) = linfit(&xs, &ys);
+        let leitura = if (a - 2.0).abs() < 0.35 { "a ≈ 2  → AIC" } else { "a longe de 2" };
+        println!("{t:>8} {a:>12.3} {b0:>12.3} {r2:>10.4} {leitura:>34}");
+    }
+    println!("\nIntercepto tem que ficar ≈1 (âncora) em todos os orçamentos:");
+    println!("um átomo que não busca captura 1·σ², independentemente de quanto tempo passa.");
 }
