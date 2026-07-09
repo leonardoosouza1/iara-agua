@@ -104,6 +104,8 @@ pub struct World<A: Atom> {
     pub bounds: AtomBounds,
     pub births: u64,
     pub deaths: u64,
+    /// nº de átomos renderizados+avaliados (orçamento de busca — comparável ao MP)
+    pub evals: u64,
     next_id: u64,
 }
 
@@ -122,6 +124,7 @@ impl<A: Atom> World<A> {
             bounds,
             births: 0,
             deaths: 0,
+            evals: 0,
             next_id: 0,
         };
         world.rain(world.cfg.init);
@@ -150,6 +153,7 @@ impl<A: Atom> World<A> {
 
     /// Nasce um ser: amp ajustada em forma fechada contra o resíduo atual.
     fn spawn(&mut self, atom: A) -> bool {
+        self.evals += 1;
         let unit = atom.render_unit(&self.target.dims);
         let n2 = unit.norm2();
         if n2 < 1e-4 {
@@ -197,6 +201,7 @@ impl<A: Atom> World<A> {
             );
             (cand, u_cur, b.amp)
         };
+        self.evals += 1;
         let cu = cand.render_unit(&self.target.dims);
         let cn2 = cu.norm2();
         if cn2 < 1e-4 {

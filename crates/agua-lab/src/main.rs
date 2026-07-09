@@ -34,6 +34,10 @@ struct Config {
     atoms: AtomBounds,
 }
 
+fn default_mp_candidates() -> usize {
+    24
+}
+
 #[derive(Deserialize, Clone)]
 struct ExperimentCfg {
     name: String,
@@ -41,6 +45,10 @@ struct ExperimentCfg {
     max_ticks: u64,
     log_every: u64,
     snapshot_every: u64,
+    /// candidatos por passo do matching pursuit (teto guloso). Mais = teto mais duro.
+    /// 0 = ISO-BUDGET: dá ao MP o mesmo nº de avaliações que a sobrevivência gastou.
+    #[serde(default = "default_mp_candidates")]
+    mp_candidates: usize,
 }
 
 fn default_modality() -> String {
@@ -68,6 +76,12 @@ struct WorldCfg {
     /// audio: taxa pro WAV exportado (e truncagem do carregado)
     #[serde(default = "default_sample_rate")]
     sample_rate: u32,
+    /// ADAPTAÇÃO: segundo alvo. Se presente + switch_at>0, o mundo TROCA de
+    /// sinal no tick switch_at (a população tem que se re-harmonizar).
+    #[serde(default)]
+    target_b: Option<String>,
+    #[serde(default)]
+    switch_at: u64,
 }
 
 /// Bandas de frequência (ciclos/amostra) pro histograma da pirâmide.
@@ -127,6 +141,7 @@ fn demo(modality: &str, ticks: u64) {
             max_ticks: ticks,
             log_every: 50,
             snapshot_every: ticks / 4,
+            mp_candidates: 24,
         },
         world: WorldCfg {
             modality: modality.into(),
@@ -134,6 +149,8 @@ fn demo(modality: &str, ticks: u64) {
             size,
             frames,
             sample_rate: 16000,
+            target_b: None,
+            switch_at: 0,
         },
         life: LifeConfig::default(),
         atoms: AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 24.0 },
@@ -294,13 +311,32 @@ fn run_generic<A: Atom>(
             "dc": dc,
         },
         "max_ticks": exp.max_ticks,
+        "mp_candidates": exp.mp_candidates,
     }))
     .unwrap();
     rd.copy_config(toml_src).unwrap();
     viz.save(&rd, "target", &target_dc, false);
 
+    // alvo B (adaptação): mesmo DC-shift do alvo A pra comparar em pé de igualdade
+    let target_b: Option<Field> = cfg.world.target_b.as_ref().map(|p| {
+        let mut wb = cfg.world.clone();
+        wb.target = p.clone();
+        let mut tb = match cfg.world.modality.as_str() {
+            "image" => load_image_target(&wb),
+            "audio" => load_audio_target(&wb),
+            _ => panic!("target_b só image/audio"),
+        };
+        let dcb = tb.mean();
+        for v in tb.data.iter_mut() {
+            *v -= dcb;
+        }
+        tb
+    });
+
     let mut world: World<A> = World::new(target.clone(), cfg.life.clone(), cfg.atoms.clone(), seed);
     let mut best_psnr = world.psnr(1.0);
+    let mut evals_at_switch = 0u64;
+    let mut psnr_on_switch = 0.0f32; // PSNR em B ANTES de adaptar (população de A crua)
 
     println!(
         "▶ {} seed={} [{}] | dims {:?} | pop inicial {} | psnr0 {:.2} dB",
@@ -313,6 +349,14 @@ fn run_generic<A: Atom>(
     );
 
     for tick in 1..=exp.max_ticks {
+        // TROCA DE SINAL: o relevo muda; a água tem que reescoar
+        if let (Some(tb), true) = (target_b.as_ref(), cfg.world.switch_at == tick) {
+            evals_at_switch = world.evals;
+            world.target = tb.clone();
+            world.rebuild();
+            psnr_on_switch = world.psnr(1.0);
+            println!("  ↻ tick {tick}: sinal trocou; psnr sem adaptar = {psnr_on_switch:.2} dB");
+        }
         world.step();
         if tick % exp.log_every == 0 {
             let p = world.psnr(1.0);
@@ -347,7 +391,20 @@ fn run_generic<A: Atom>(
     let n = alive.max(1);
     let cps: Vec<usize> = [n / 4, n / 2, n].iter().copied().filter(|v| *v > 0).collect();
     let rnd = random_atoms::<A>(&target, n, &cfg.atoms, seed ^ 0xABCD, &cps);
-    let mp = matching_pursuit::<A>(&target, n, 24, &cfg.atoms, seed ^ 0x1234, &cps);
+    // iso-budget: MP recebe o MESMO orçamento de avaliações que a sobrevivência gastou.
+    // No modo adaptação, o orçamento justo é o da FASE B (resposta à mudança) —
+    // o MP é offline e teria que resolver B do zero com esse orçamento.
+    let budget = if target_b.is_some() {
+        world.evals - evals_at_switch
+    } else {
+        world.evals
+    };
+    let mp_cands = if exp.mp_candidates == 0 {
+        ((budget as usize) / n).max(1)
+    } else {
+        exp.mp_candidates
+    };
+    let mp = matching_pursuit::<A>(&target, n, mp_cands, &cfg.atoms, seed ^ 0x1234, &cps);
     let jpeg = if cfg.world.modality == "image" {
         jpeg_curve(&target_dc, &[10, 30, 50, 70, 90])
     } else {
@@ -366,6 +423,13 @@ fn run_generic<A: Atom>(
         "bytes": bytes,
         "births": world.births,
         "deaths": world.deaths,
+        "evals": world.evals,
+        "adapt": target_b.is_some(),
+        "switch_at": cfg.world.switch_at,
+        "evals_phase_b": world.evals - evals_at_switch,
+        "psnr_on_switch_db": psnr_on_switch,
+        "mp_candidates": mp_cands,
+        "mp_evals": n * mp_cands,
         "ticks": exp.max_ticks,
         "wall_secs": wall,
         "invariant_error": world.invariant_error(),

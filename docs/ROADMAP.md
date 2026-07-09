@@ -12,7 +12,14 @@ Workspace 6 crates, física de sobrevivência GENÉRICA (`World<A: Atom>`, Field
 - vídeo 400 ticks: 18.7→29.0 dB — **bateu MP (27.2)** e random (20.8)
 (nota honesta: MP aqui é single-pass sem refit; sobrevivência tem relaxação contínua — em áudio/vídeo isso já paga. 1 seed; bateria confirma.)
 
-## F1 — Ciência: bateria multimodal (~50 runs/modalidade) ← PRÓXIMA
+## ✅ F1 — Bateria multimodal (192 runs, 2026-07-09) — VEREDITO NEGATIVO honesto
+Resultados completos em `docs/RESULTS_F1.md`. Resumo: MP guloso iso-budget vence a sobrevivência em TODA modalidade/regime (−4.6 a −26.7 dB); o "áudio/vídeo batem MP" do F0 era falso-positivo (MP com 24 candidatos). Positivos reais: metabolismo = dial taxa-distorção (monotônico em 3 ordens de grandeza), pirâmide grosso→fino emerge (16/20 runs), adaptação online a sinal trocado (+1.8 dB sem reiniciar).
+**Consequência:** F2 (harmonia/CfC) e F5 (perf) NÃO são o gargalo — otimizar busca não fecha 5–26 dB. **Pular pra F4** (átomo não-linear / prior importado), onde MP não se aplica.
+
+### F1-bis (o que sobrou, opcional)
+- Vídeo com frames PNG reais; quantização int8 dos params (pré-requisito pra comparar com JPEG: hoje 28 B/átomo f32, JPEG q30 faz 30.2 dB com 485 B).
+
+## ~~F1 (plano original)~~
 A pergunta da visão §5: seleção sem gradiente chega perto (ou bate) o matching pursuit? A pirâmide emerge?
 - **Imagem (exp001):** sweep `metabolism` (dial taxa-distorção) × `cap` × `mutation_sigma` × `life_tuning on/off` × `tune_every` × ticks longos (20k+). Alvos: sintético + ≥2 PNGs reais 64×64 e 128×128 (fotos com textura fina).
 - **Áudio (exp002):** WAVs reais (fala PT + música, PCM16) + sintético; bounds de grão longo (sigma_max 400). O smoke já bateu MP — validar multi-seed e contra MP com mais candidatos.
