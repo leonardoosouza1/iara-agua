@@ -213,3 +213,40 @@ POSITIVOS reais: metabolismo é dial taxa-distorção (129→3000 seres, 28.8→
 pirâmide grosso→fino emerge em 16/20 runs (+3 a +7 pp de átomos finos); adaptação a sinal
 trocado sem reiniciar (+1.8 dB) — mas MP a frio ainda ganha por 8-10 dB.
 Rota: só F4 (prior importado / átomo não-linear) pode ganhar — onde MP não se aplica.
+| 1783630970 | VIZ-adapt | 11 | 3600 | 24.98 | 1420 | 39760 | 37.37 | 21.86 | bate random (+3.13 dB), gap MP 12.39 dB |
+| 1783631020 | VIZ-speech | 11 | 3000 | 28.98 | 1267 | 25340 | 38.80 | 22.49 | bate random (+6.49 dB), gap MP 9.82 dB |
+| 1783631136 | L9-cego | 11 | 3000 | 23.29 | 143 | 4004 | 27.13 | 18.11 | bate random (+5.17 dB), gap MP 3.85 dB |
+| 1783631139 | L9-comp4 | 11 | 3000 | 23.77 | 184 | 5152 | 28.65 | 18.67 | bate random (+5.10 dB), gap MP 4.88 dB |
+| 1783631139 | L9-cego | 55 | 3000 | 23.30 | 172 | 4816 | 27.89 | 18.28 | bate random (+5.03 dB), gap MP 4.59 dB |
+| 1783631139 | L9-cego | 44 | 3000 | 23.58 | 205 | 5740 | 29.12 | 18.57 | bate random (+5.01 dB), gap MP 5.54 dB |
+| 1783631140 | L9-cego | 33 | 3000 | 23.12 | 182 | 5096 | 28.37 | 18.46 | bate random (+4.65 dB), gap MP 5.25 dB |
+| 1783631141 | L9-cego | 22 | 3000 | 23.35 | 221 | 6188 | 29.54 | 18.50 | bate random (+4.85 dB), gap MP 6.20 dB |
+| 1783631150 | L9-comp4 | 22 | 3000 | 23.71 | 137 | 3836 | 27.14 | 17.91 | bate random (+5.80 dB), gap MP 3.43 dB |
+| 1783631154 | L9-comp4 | 33 | 3000 | 23.62 | 158 | 4424 | 27.91 | 18.32 | bate random (+5.30 dB), gap MP 4.29 dB |
+| 1783631155 | L9-comp4 | 44 | 3000 | 23.66 | 184 | 5152 | 28.61 | 18.44 | bate random (+5.22 dB), gap MP 4.95 dB |
+| 1783631156 | L9-comp4 | 55 | 3000 | 23.79 | 179 | 5012 | 28.25 | 18.32 | bate random (+5.47 dB), gap MP 4.46 dB |
+| 1783631161 | L9-comp16 | 22 | 3000 | 23.55 | 135 | 3780 | 27.33 | 17.90 | bate random (+5.64 dB), gap MP 3.79 dB |
+| 1783631165 | L9-comp16 | 11 | 3000 | 24.11 | 180 | 5040 | 28.87 | 18.66 | bate random (+5.45 dB), gap MP 4.77 dB |
+| 1783631171 | L9-comp16 | 33 | 3000 | 24.03 | 139 | 3892 | 27.40 | 18.16 | bate random (+5.87 dB), gap MP 3.37 dB |
+| 1783631176 | L9-comp16 | 44 | 3000 | 23.69 | 156 | 4368 | 28.26 | 17.91 | bate random (+5.78 dB), gap MP 4.57 dB |
+| 1783631181 | L9-comp16 | 55 | 3000 | 24.21 | 180 | 5040 | 28.55 | 18.32 | bate random (+5.88 dB), gap MP 4.34 dB |
+| 1783631205 | L9-comp64 | 11 | 3000 | 24.74 | 127 | 3556 | 27.61 | 17.82 | bate random (+6.92 dB), gap MP 2.87 dB |
+| 1783631214 | L9-comp64 | 22 | 3000 | 24.72 | 168 | 4704 | 28.94 | 18.27 | bate random (+6.45 dB), gap MP 4.22 dB |
+| 1783631218 | L9-comp64 | 33 | 3000 | 24.41 | 152 | 4256 | 28.48 | 18.29 | bate random (+6.11 dB), gap MP 4.07 dB |
+| 1783631226 | L9-irmaos4 | 11 | 3000 | 24.03 | 185 | 5180 | 29.05 | 18.67 | bate random (+5.36 dB), gap MP 5.01 dB |
+| 1783631228 | L9-comp64 | 44 | 3000 | 24.80 | 124 | 3472 | 27.53 | 17.50 | bate random (+7.30 dB), gap MP 2.73 dB |
+| 1783631229 | L9-comp64 | 55 | 3000 | 24.16 | 151 | 4228 | 28.42 | 17.94 | bate random (+6.22 dB), gap MP 4.26 dB |
+| 1783631244 | L9-irmaos4 | 33 | 3000 | 23.72 | 137 | 3836 | 27.50 | 18.16 | bate random (+5.56 dB), gap MP 3.78 dB |
+| 1783631251 | L9-irmaos4 | 22 | 3000 | 23.53 | 199 | 5572 | 29.57 | 18.42 | bate random (+5.10 dB), gap MP 6.04 dB |
+| 1783631264 | L9-irmaos4 | 44 | 3000 | 23.55 | 213 | 5964 | 29.90 | 18.70 | bate random (+4.85 dB), gap MP 6.36 dB |
+| 1783631269 | L9-comp16-irm4 | 11 | 3000 | 24.13 | 133 | 3724 | 27.50 | 17.93 | bate random (+6.19 dB), gap MP 3.37 dB |
+| 1783631270 | L9-comp16-irm4 | 22 | 3000 | 23.98 | 141 | 3948 | 27.94 | 17.95 | bate random (+6.03 dB), gap MP 3.95 dB |
+| 1783631277 | L9-irmaos4 | 55 | 3000 | 23.32 | 195 | 5460 | 29.53 | 18.42 | bate random (+4.90 dB), gap MP 6.21 dB |
+| 1783631292 | L9-comp16-irm4 | 33 | 3000 | 24.21 | 165 | 4620 | 28.71 | 18.36 | bate random (+5.86 dB), gap MP 4.49 dB |
+| 1783631295 | L9-comp16-irm4 | 44 | 3000 | 24.25 | 152 | 4256 | 28.38 | 17.82 | bate random (+6.43 dB), gap MP 4.13 dB |
+| 1783631314 | L9-comp16-irm4 | 55 | 3000 | 24.29 | 184 | 5152 | 29.50 | 18.34 | bate random (+5.96 dB), gap MP 5.21 dB |
+| 1783631358 | L9-comp64-irm8 | 11 | 3000 | 24.62 | 123 | 3444 | 27.75 | 17.79 | bate random (+6.83 dB), gap MP 3.12 dB |
+| 1783631364 | L9-comp64-irm8 | 22 | 3000 | 24.52 | 162 | 4536 | 29.24 | 18.18 | bate random (+6.35 dB), gap MP 4.71 dB |
+| 1783631370 | L9-comp64-irm8 | 33 | 3000 | 24.83 | 147 | 4116 | 28.75 | 18.28 | bate random (+6.55 dB), gap MP 3.92 dB |
+| 1783631384 | L9-comp64-irm8 | 44 | 3000 | 24.94 | 153 | 4284 | 28.96 | 17.90 | bate random (+7.04 dB), gap MP 4.02 dB |
+| 1783631386 | L9-comp64-irm8 | 55 | 3000 | 24.93 | 153 | 4284 | 28.64 | 17.95 | bate random (+6.99 dB), gap MP 3.70 dB |

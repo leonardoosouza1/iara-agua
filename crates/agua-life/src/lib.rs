@@ -48,6 +48,18 @@ pub struct LifeConfig {
     pub rain_every: u64,
     /// quantos imigrantes por chuva
     pub rain_count: usize,
+    /// COMPETIÇÃO POR VAGA: quantas sementes disputam cada vaga de nascimento
+    /// (só a que mais come vinga). 1 = chuva cega (v0).
+    #[serde(default = "one")]
+    pub rain_competition: usize,
+    /// IRMÃOS: quantas propostas de geometria competem em cada ajuste-de-vida.
+    /// 1 = uma proposta (v0).
+    #[serde(default = "one")]
+    pub tune_offspring: usize,
+}
+
+fn one() -> usize {
+    1
 }
 
 impl Default for LifeConfig {
@@ -66,6 +78,8 @@ impl Default for LifeConfig {
             tune_every: 3,
             rain_every: 20,
             rain_count: 6,
+            rain_competition: 1,
+            tune_offspring: 1,
         }
     }
 }
@@ -137,23 +151,43 @@ impl<A: Atom> World<A> {
             return;
         }
         let sampler = HotspotSampler::new(&self.residual);
+        let k = self.cfg.rain_competition.max(1);
         for _ in 0..count {
             if self.beings.len() >= self.cfg.cap {
                 return;
             }
-            let idx = sampler.sample(&mut self.rng);
-            let pos: Vec<f32> = unflatten(&self.target.dims, idx)
-                .into_iter()
-                .map(|v| v as f32)
-                .collect();
-            let atom = A::rain_at(&pos, &self.bounds, &mut self.rng);
-            self.spawn(atom);
+            // K sementes caem na vaga; só a que EXPLICA MAIS resíduo vinga.
+            let mut best: Option<(f32, A)> = None;
+            for _ in 0..k {
+                let idx = sampler.sample(&mut self.rng);
+                let pos: Vec<f32> = unflatten(&self.target.dims, idx)
+                    .into_iter()
+                    .map(|v| v as f32)
+                    .collect();
+                let atom = A::rain_at(&pos, &self.bounds, &mut self.rng);
+                self.evals += 1;
+                let unit = atom.render_unit(&self.target.dims);
+                if let Some((_, explained)) = fit_amp(&unit, &self.residual) {
+                    if best.as_ref().map_or(true, |(e, _)| explained > *e) {
+                        best = Some((explained, atom));
+                    }
+                }
+            }
+            if let Some((_, atom)) = best {
+                self.spawn_counted(atom, false);
+            }
         }
     }
 
     /// Nasce um ser: amp ajustada em forma fechada contra o resíduo atual.
     fn spawn(&mut self, atom: A) -> bool {
-        self.evals += 1;
+        self.spawn_counted(atom, true)
+    }
+
+    fn spawn_counted(&mut self, atom: A, count_eval: bool) -> bool {
+        if count_eval {
+            self.evals += 1;
+        }
         let unit = atom.render_unit(&self.target.dims);
         let n2 = unit.norm2();
         if n2 < 1e-4 {
@@ -188,28 +222,40 @@ impl<A: Atom> World<A> {
 
     /// Busca local sem gradiente: propõe geometria mutada; troca se explicar
     /// mais o resíduo-sem-ele (com histerese de 2% pra não thrashar).
+    /// Busca local sem gradiente: os IRMÃOS competem. Gera `tune_offspring`
+    /// propostas de geometria; a melhor troca o corpo se explicar ≥2% mais o
+    /// resíduo-sem-ele (histerese contra thrashing).
     fn try_tune(&mut self, i: usize) {
-        let (cand, u_cur, amp_old) = {
+        let (u_cur, amp_old) = {
             let b = &self.beings[i];
             let d_cur = b.unit.dot_field(&self.residual) + b.amp * b.n2;
-            let u_cur = d_cur * d_cur / b.n2;
-            let cand = b.atom.mutate(
+            (d_cur * d_cur / b.n2, b.amp)
+        };
+        let k = self.cfg.tune_offspring.max(1);
+        let mut best: Option<(f32, f32, A, Patch, f32)> = None; // (u, cd, atom, unit, n2)
+        for _ in 0..k {
+            let cand = self.beings[i].atom.mutate(
                 &mut self.rng,
                 self.cfg.mutation_sigma,
                 &self.bounds,
                 &self.target.dims,
             );
-            (cand, u_cur, b.amp)
-        };
-        self.evals += 1;
-        let cu = cand.render_unit(&self.target.dims);
-        let cn2 = cu.norm2();
-        if cn2 < 1e-4 {
-            return;
+            self.evals += 1;
+            let cu = cand.render_unit(&self.target.dims);
+            let cn2 = cu.norm2();
+            if cn2 < 1e-4 {
+                continue;
+            }
+            // ⟨r_sem_eu, ψc⟩ = ⟨residual, ψc⟩ + amp·⟨ψ_velho, ψc⟩ (overlap dos patches)
+            let cd = cu.dot_field(&self.residual) + amp_old * cu.dot_patch(&self.beings[i].unit);
+            let u_new = cd * cd / cn2;
+            if best.as_ref().map_or(true, |(u, _, _, _, _)| u_new > *u) {
+                best = Some((u_new, cd, cand, cu, cn2));
+            }
         }
-        // ⟨r_sem_eu, ψc⟩ = ⟨residual, ψc⟩ + amp·⟨ψ_velho, ψc⟩ (overlap dos patches)
-        let cd = cu.dot_field(&self.residual) + amp_old * cu.dot_patch(&self.beings[i].unit);
-        let u_new = cd * cd / cn2;
+        let Some((u_new, cd, cand, cu, cn2)) = best else {
+            return;
+        };
         if u_new > u_cur * 1.02 {
             // remove o corpo velho, veste o novo, re-ajusta amp
             let old_unit = std::mem::replace(&mut self.beings[i].unit, cu);
@@ -351,6 +397,19 @@ impl<A: Atom> World<A> {
             bands[k] += 1;
         }
         bands
+    }
+
+    /// Reconstrução usando SÓ os seres cuja freq cai em [lo, hi) — a fatia
+    /// da pirâmide. Somar todas as fatias = recon completa.
+    pub fn recon_band(&self, lo: f32, hi: f32) -> Field {
+        let mut f = Field::zeros(&self.target.dims);
+        for b in &self.beings {
+            let q = b.atom.freq();
+            if q >= lo && q < hi {
+                f.add_scaled_patch(&b.unit, b.amp);
+            }
+        }
+        f
     }
 
     pub fn population_records(&self) -> Vec<BeingRecord<A>> {

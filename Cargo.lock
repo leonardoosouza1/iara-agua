@@ -17,6 +17,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "agua-codec"
+version = "0.1.0"
+dependencies = [
+ "agua-atoms",
+ "agua-core",
+]
+
+[[package]]
 name = "agua-core"
 version = "0.1.0"
 

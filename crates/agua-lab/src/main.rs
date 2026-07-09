@@ -23,6 +23,7 @@ use agua_telemetry::{
 use serde::Deserialize;
 use std::path::Path;
 
+mod compare;
 mod targets;
 use targets::{synthetic_audio, synthetic_image, synthetic_video};
 
@@ -109,6 +110,37 @@ fn main() {
             for seed in cfg.experiment.seeds.clone() {
                 dispatch(&cfg, &toml_src, seed, Path::new(&out));
             }
+        }
+        Some("compare") => {
+            let target = flag_value(&args, "--target").unwrap_or_else(|| "synthetic".into());
+            let out = flag_value(&args, "--out").unwrap_or_else(|| "/tmp/agua-compare".into());
+            let seed: u64 = flag_value(&args, "--seed").map_or(11, |v| v.parse().unwrap());
+            let ticks: u64 = flag_value(&args, "--ticks").map_or(3000, |v| v.parse().unwrap());
+            let met: f32 = flag_value(&args, "--metabolism").map_or(0.8, |v| v.parse().unwrap());
+            let size: usize = flag_value(&args, "--size").map_or(64, |v| v.parse().unwrap());
+            let wcfg = WorldCfg {
+                modality: "image".into(),
+                target,
+                size,
+                frames: 0,
+                sample_rate: 16000,
+                target_b: None,
+                switch_at: 0,
+            };
+            let mut life = LifeConfig::default();
+            life.cap = 3000;
+            life.metabolism = met;
+            life.rain_every = 1;
+            life.rain_count = 6; // rainHeavy: melhor variante da bateria F1
+            compare::run(compare::CompareArgs {
+                target_dc: load_image_target(&wcfg),
+                life,
+                bounds: AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 24.0 },
+                ticks,
+                seed,
+                out: Path::new(&out),
+                checkpoints: &[10, 50, 200, 800, 3000],
+            });
         }
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),

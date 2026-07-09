@@ -107,6 +107,62 @@ pub fn matching_pursuit<A: Atom>(
     out
 }
 
+/// Reconstrução final do matching pursuit (pra comparação visual).
+pub fn matching_pursuit_recon<A: Atom>(
+    target: &Field,
+    n: usize,
+    candidates: usize,
+    bounds: &AtomBounds,
+    seed: u64,
+) -> Field {
+    let mut rng = Rng::new(seed);
+    let mut residual = target.clone();
+    let mut recon = Field::zeros(&target.dims);
+    for _ in 0..n {
+        let sampler = HotspotSampler::new(&residual);
+        let mut best: Option<(f32, f32, agua_core::Patch)> = None;
+        for _ in 0..candidates {
+            let idx = sampler.sample(&mut rng);
+            let pos: Vec<f32> = unflatten(&target.dims, idx).into_iter().map(|v| v as f32).collect();
+            let g = A::rain_at(&pos, bounds, &mut rng);
+            let unit = g.render_unit(&target.dims);
+            if let Some((amp, explained)) = fit_amp(&unit, &residual) {
+                if best.as_ref().map_or(true, |(e, _, _)| explained > *e) {
+                    best = Some((explained, amp, unit));
+                }
+            }
+        }
+        if let Some((_, amp, unit)) = best {
+            residual.add_scaled_patch(&unit, -amp);
+            recon.add_scaled_patch(&unit, amp);
+        }
+    }
+    recon
+}
+
+/// Reconstrução final do random-atoms (piso, pra comparação visual).
+pub fn random_atoms_recon<A: Atom>(
+    target: &Field,
+    n: usize,
+    bounds: &AtomBounds,
+    seed: u64,
+) -> Field {
+    let mut rng = Rng::new(seed);
+    let mut residual = target.clone();
+    let mut recon = Field::zeros(&target.dims);
+    for _ in 0..n {
+        let idx = rng.usize(target.len());
+        let pos: Vec<f32> = unflatten(&target.dims, idx).into_iter().map(|v| v as f32).collect();
+        let g = A::rain_at(&pos, bounds, &mut rng);
+        let unit = g.render_unit(&target.dims);
+        if let Some((amp, _)) = fit_amp(&unit, &residual) {
+            residual.add_scaled_patch(&unit, -amp);
+            recon.add_scaled_patch(&unit, amp);
+        }
+    }
+    recon
+}
+
 /// Referência mundo-real (só imagem 2D): JPEG em várias qualidades
 /// (bytes reais do arquivo). `target` em [0,1] (com DC), dims [h, w].
 pub fn jpeg_curve(target: &Field, qualities: &[u8]) -> Vec<RdPoint> {

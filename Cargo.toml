@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/agua-core",
     "crates/agua-atoms",
+    "crates/agua-codec",
     "crates/agua-life",
     "crates/agua-metrics",
     "crates/agua-telemetry",
@@ -18,6 +19,7 @@ license = "MIT"
 [workspace.dependencies]
 agua-core = { path = "crates/agua-core" }
 agua-atoms = { path = "crates/agua-atoms" }
+agua-codec = { path = "crates/agua-codec" }
 agua-life = { path = "crates/agua-life" }
 agua-metrics = { path = "crates/agua-metrics" }
 agua-telemetry = { path = "crates/agua-telemetry" }
