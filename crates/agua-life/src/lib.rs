@@ -56,6 +56,17 @@ pub struct LifeConfig {
     /// 1 = uma proposta (v0).
     #[serde(default = "one")]
     pub tune_offspring: usize,
+    /// HÍBRIDO: o ser refina a geometria por GRADIENTE (Adam) em vez de mutação.
+    /// A sobrevivência continua dona do DISCRETO (nascer/morrer/quantos).
+    #[serde(default)]
+    pub gradient: bool,
+    /// lr do Adam, em unidades da escala natural de cada parâmetro
+    #[serde(default = "default_lr")]
+    pub lr: f32,
+}
+
+fn default_lr() -> f32 {
+    0.03
 }
 
 fn one() -> usize {
@@ -80,6 +91,8 @@ impl Default for LifeConfig {
             rain_count: 6,
             rain_competition: 1,
             tune_offspring: 1,
+            gradient: false,
+            lr: 0.03,
         }
     }
 }
@@ -95,6 +108,10 @@ pub struct Being<A: Atom> {
     pub amp: f32,
     pub energy: f32,
     pub age: u64,
+    /// momentos do Adam (só usados no modo gradiente)
+    m: Vec<f32>,
+    v: Vec<f32>,
+    steps: u64,
 }
 
 /// Snapshot serializável da população — a própria CODIFICAÇÃO do sinal.
@@ -208,6 +225,9 @@ impl<A: Atom> World<A> {
             amp,
             energy: self.cfg.initial_energy,
             age: 0,
+            m: vec![0.0; A::GEOM],
+            v: vec![0.0; A::GEOM],
+            steps: 0,
         });
         true
     }
@@ -272,17 +292,86 @@ impl<A: Atom> World<A> {
         }
     }
 
+    /// Refino por GRADIENTE (Adam) na geometria do ser i. O gradiente é
+    /// analítico e local ao suporte: ∂E/∂p = −amp·⟨resíduo, ∂ψ/∂p⟩.
+    /// Depois do passo, re-renderiza e re-ajusta amp em forma fechada.
+    fn grad_step(&mut self, i: usize) {
+        if A::GEOM == 0 {
+            return;
+        }
+        let (g, scale, amp_old) = {
+            let b = &self.beings[i];
+            (
+                b.atom.grad(&self.target.dims, &self.residual, b.amp),
+                b.atom.param_scale(&self.target.dims),
+                b.amp,
+            )
+        };
+        self.evals += 1; // custo de um render
+
+        const B1: f32 = 0.9;
+        const B2: f32 = 0.999;
+        const EPS: f32 = 1e-8;
+        let lr = self.cfg.lr;
+        let mut delta = vec![0.0f32; A::GEOM];
+        {
+            let b = &mut self.beings[i];
+            b.steps += 1;
+            let t = b.steps as f32;
+            let bc1 = 1.0 - B1.powf(t);
+            let bc2 = 1.0 - B2.powf(t);
+            for k in 0..A::GEOM {
+                b.m[k] = B1 * b.m[k] + (1.0 - B1) * g[k];
+                b.v[k] = B2 * b.v[k] + (1.0 - B2) * g[k] * g[k];
+                let mh = b.m[k] / bc1;
+                let vh = b.v[k] / bc2;
+                // passo normalizado (Adam) × escala natural do parâmetro
+                delta[k] = -lr * scale[k] * mh / (vh.sqrt() + EPS);
+            }
+        }
+
+        // veste a nova geometria: tira o corpo velho do campo, põe o novo
+        let mut cand = self.beings[i].atom.clone();
+        cand.apply_delta(&delta, &self.bounds, &self.target.dims);
+        let cu = cand.render_unit(&self.target.dims);
+        let cn2 = cu.norm2();
+        if cn2 < 1e-4 || !cn2.is_finite() {
+            return;
+        }
+        let old_unit = std::mem::replace(&mut self.beings[i].unit, cu);
+        self.recon.add_scaled_patch(&old_unit, -amp_old);
+        self.residual.add_scaled_patch(&old_unit, amp_old);
+        let unit = self.beings[i].unit.clone();
+        let Some((new_amp, _)) = fit_amp(&unit, &self.residual) else {
+            // restaura se degenerou
+            self.beings[i].unit = old_unit;
+            self.recon.add_scaled_patch(&self.beings[i].unit.clone(), amp_old);
+            self.residual.add_scaled_patch(&self.beings[i].unit.clone(), -amp_old);
+            return;
+        };
+        let b = &mut self.beings[i];
+        b.atom = cand;
+        b.n2 = cn2;
+        b.amp = new_amp;
+        self.recon.add_scaled_patch(&unit, new_amp);
+        self.residual.add_scaled_patch(&unit, -new_amp);
+    }
+
     /// Um tick de vida: ajustar → comer → morrer → reproduzir → chover.
     pub fn step(&mut self) {
         self.tick += 1;
         let n = self.beings.len();
 
-        // 1. ajuste-de-vida (geometria, busca local)
+        // 1. ajuste-de-vida (geometria): gradiente (Adam) ou busca local por mutação
         if self.cfg.life_tuning && self.tick % self.cfg.tune_every == 0 {
             let order = self.rng.shuffled_indices(n);
             for i in order {
                 if i < self.beings.len() {
-                    self.try_tune(i);
+                    if self.cfg.gradient {
+                        self.grad_step(i);
+                    } else {
+                        self.try_tune(i);
+                    }
                 }
             }
         }
@@ -410,6 +499,19 @@ impl<A: Atom> World<A> {
             }
         }
         f
+    }
+
+    /// Energia explicada AGORA por cada ser vivo: E_i = ⟨r_sem_i, ψ̂_i⟩².
+    /// É exatamente a grandeza que o metabolismo tem que superar pra matar
+    /// um ser — em ruído puro, E[E_i] = c·σ² define o metabolismo crítico.
+    pub fn explained_now(&self) -> Vec<f32> {
+        self.beings
+            .iter()
+            .map(|b| {
+                let d = b.unit.dot_field(&self.residual) + b.amp * b.n2;
+                d * d / b.n2
+            })
+            .collect()
     }
 
     pub fn population_records(&self) -> Vec<BeingRecord<A>> {

@@ -24,6 +24,9 @@ use serde::Deserialize;
 use std::path::Path;
 
 mod compare;
+mod denoise;
+mod law;
+mod law2;
 mod targets;
 use targets::{synthetic_audio, synthetic_image, synthetic_video};
 
@@ -141,6 +144,122 @@ fn main() {
                 out: Path::new(&out),
                 checkpoints: &[10, 50, 200, 800, 3000],
             });
+        }
+        Some("denoise") => {
+            let target = flag_value(&args, "--target").unwrap_or_else(|| "synthetic".into());
+            let modality = flag_value(&args, "--modality").unwrap_or_else(|| "image".into());
+            let seed: u64 = flag_value(&args, "--seed").map_or(11, |v| v.parse().unwrap());
+            let ticks: u64 = flag_value(&args, "--ticks").map_or(1500, |v| v.parse().unwrap());
+            let sigma: f32 = flag_value(&args, "--sigma").map_or(0.1, |v| v.parse().unwrap());
+            let mut met: f32 = flag_value(&args, "--metabolism").map_or(0.8, |v| v.parse().unwrap());
+            let size: usize = flag_value(&args, "--size").map_or(96, |v| v.parse().unwrap());
+            let grad: bool = flag_value(&args, "--gradient").map_or(true, |v| v == "true");
+            let out = flag_value(&args, "--out");
+            // --auto: aplica a LEI met = k·σ̂², com σ̂ estimado do sinal ruidoso.
+            // Nenhum hiperparâmetro, nenhum acesso ao sinal limpo.
+            let auto: bool = args.iter().any(|a| a == "--auto");
+            let k_law: f32 = flag_value(&args, "--k").map_or(40.0, |v| v.parse().unwrap());
+            let wcfg = WorldCfg {
+                modality: modality.clone(),
+                target,
+                size,
+                frames: 0,
+                sample_rate: 16000,
+                target_b: None,
+                switch_at: 0,
+            };
+            let mut life = LifeConfig::default();
+            life.cap = 3000;
+            life.metabolism = met;
+            life.rain_every = 1;
+            life.rain_count = 6;
+            life.rain_competition = 16;
+            life.tune_every = 1;
+            life.gradient = grad;
+            let bounds = if modality == "audio" {
+                AtomBounds { freq_min: 0.002, freq_max: 0.45, sigma_min: 2.0, sigma_max: 400.0 }
+            } else {
+                AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 24.0 }
+            };
+            if auto {
+                // estima σ do MESMO sinal ruidoso que o solver vai ver
+                let clean_probe = if modality == "audio" { load_audio_target(&wcfg) } else { load_image_target(&wcfg) };
+                let noisy_probe = denoise::add_noise(&clean_probe, sigma, seed ^ 0x0157);
+                let sig_hat = denoise::estimate_sigma(&noisy_probe);
+                met = k_law * sig_hat * sig_hat;
+                life.metabolism = met;
+                println!("[AUTO] σ real={sigma:.4}  σ̂ estimado={sig_hat:.4}  (erro {:+.1}%)  → met = {k_law}·σ̂² = {met:.4}",
+                    100.0 * (sig_hat - sigma) / sigma);
+            }
+            let (rows, recon, noisy) = if modality == "audio" {
+                let clean = load_audio_target(&wcfg);
+                denoise::run::<Gabor1D>(denoise::DenoiseArgs {
+                    clean, sigma, life, bounds, ticks, seed,
+                    mp_candidates: 64, n_max: 1200, blur: false, label: "audio",
+                })
+            } else {
+                let clean = load_image_target(&wcfg);
+                denoise::run::<Gabor2D>(denoise::DenoiseArgs {
+                    clean, sigma, life, bounds, ticks, seed,
+                    mp_candidates: 64, n_max: 1200, blur: true, label: "image",
+                })
+            };
+            println!("\n== DENOISE {modality} sigma={sigma} seed={seed} met={met} grad={grad} ==");
+            println!("{:<18} {:>10} {:>8}  {}", "metodo", "psnr_limpo", "atomos", "nota");
+            for r in &rows {
+                println!("{:<18} {:>10.2} {:>8}  {}", r.metodo, r.psnr_limpo, r.atomos, r.nota);
+            }
+            println!("{}", serde_json::to_string(&rows).unwrap());
+            if let Some(dir) = out {
+                let d = Path::new(&dir);
+                std::fs::create_dir_all(d).unwrap();
+                if modality != "audio" {
+                    let save = |name: &str, f: &Field| {
+                        let (h, w) = (f.dims[0], f.dims[1]);
+                        let raw: Vec<u8> = f.data.iter().map(|v| (v.clamp(0.0,1.0)*255.0).round() as u8).collect();
+                        image::GrayImage::from_raw(w as u32, h as u32, raw).unwrap().save(d.join(name)).unwrap();
+                    };
+                    save("clean.png", &load_image_target(&wcfg));
+                    save("noisy.png", &noisy);
+                    save("survival.png", &recon);
+                }
+            }
+        }
+        Some("law") => {
+            let seed: u64 = flag_value(&args, "--seed").map_or(11, |v| v.parse().unwrap());
+            let sigmas = [0.02f32, 0.04, 0.08, 0.16, 0.32];
+            println!("=== LEI DO METABOLISMO CRÍTICO: met_c = c·σ^α ===");
+            println!("teoria: átomo que se ajusta a ruído captura c·σ² de energia espúria.");
+            println!("P1: α = 2   P2: c independe do sinal   P3: c cresce com os graus de liberdade\n");
+
+            let b2 = AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 24.0 };
+            println!("-- Gabor2D (6 params de geometria), campo 64x64 --");
+            let r2d = law::run_for::<Gabor2D>("Gabor2D", &[64, 64], &b2, &sigmas, seed);
+            let (a2, k2, q2) = law::fit_exponent(&r2d);
+            println!("   ajuste: met_c = {k2:.3}·σ^{a2:.3}   (R²={q2:.4})");
+
+            let b1 = AtomBounds { freq_min: 0.002, freq_max: 0.45, sigma_min: 2.0, sigma_max: 400.0 };
+            println!("\n-- Gabor1D (4 params de geometria), campo 4096 --");
+            let r1d = law::run_for::<Gabor1D>("Gabor1D", &[4096], &b1, &sigmas, seed);
+            let (a1, k1, q1) = law::fit_exponent(&r1d);
+            println!("   ajuste: met_c = {k1:.3}·σ^{a1:.3}   (R²={q1:.4})");
+
+            let mean = |rs: &[law::LawRow], f: fn(&law::LawRow) -> f32| -> f32 {
+                rs.iter().map(f).sum::<f32>() / rs.len() as f32
+            };
+            println!("\n=== VEREDITO ===");
+            println!("P1 expoente α:  2D {a2:.3}  |  1D {a1:.3}   (predito 2.000)");
+            println!("P2 c_crítico:   2D {:.2} ± spread  |  1D {:.2}", mean(&r2d, |r| r.c_critico), mean(&r1d, |r| r.c_critico));
+            println!("P3 c_busca:     2D {:.2} (6 geom)  |  1D {:.2} (4 geom)  → 1D deve ser MENOR",
+                mean(&r2d, |r| r.c_com_busca), mean(&r1d, |r| r.c_com_busca));
+            println!("âncora c_sem_busca (deve ser ≈1): 2D {:.2} | 1D {:.2}",
+                mean(&r2d, |r| r.c_sem_busca), mean(&r1d, |r| r.c_sem_busca));
+            let all: Vec<_> = r2d.iter().chain(r1d.iter()).collect();
+            println!("\n{}", serde_json::to_string(&all).unwrap());
+        }
+        Some("law2") => {
+            let seed: u64 = flag_value(&args, "--seed").map_or(11, |v| v.parse().unwrap());
+            law2::run(seed);
         }
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),

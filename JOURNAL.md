@@ -250,3 +250,47 @@ Rota: só F4 (prior importado / átomo não-linear) pode ganhar — onde MP não
 | 1783631370 | L9-comp64-irm8 | 33 | 3000 | 24.83 | 147 | 4116 | 28.75 | 18.28 | bate random (+6.55 dB), gap MP 3.92 dB |
 | 1783631384 | L9-comp64-irm8 | 44 | 3000 | 24.94 | 153 | 4284 | 28.96 | 17.90 | bate random (+7.04 dB), gap MP 4.02 dB |
 | 1783631386 | L9-comp64-irm8 | 55 | 3000 | 24.93 | 153 | 4284 | 28.64 | 17.95 | bate random (+6.99 dB), gap MP 3.70 dB |
+| 1783633115 | L10-mut-base | 11 | 3000 | 23.53 | 158 | 4424 | 28.19 | 18.33 | bate random (+5.19 dB), gap MP 4.66 dB |
+| 1783633116 | L10-mut-base | 22 | 3000 | 23.53 | 173 | 4844 | 28.89 | 18.28 | bate random (+5.25 dB), gap MP 5.36 dB |
+| 1783633117 | L10-mut-base | 33 | 3000 | 23.85 | 211 | 5908 | 29.80 | 18.55 | bate random (+5.30 dB), gap MP 5.95 dB |
+| 1783633118 | L10-mut-base | 55 | 3000 | 23.81 | 181 | 5068 | 28.77 | 18.32 | bate random (+5.49 dB), gap MP 4.95 dB |
+| 1783633120 | L10-mut-comp16 | 11 | 3000 | 24.14 | 151 | 4228 | 28.13 | 18.23 | bate random (+5.91 dB), gap MP 3.99 dB |
+| 1783633128 | L10-mut-base | 44 | 3000 | 23.39 | 276 | 7728 | 31.58 | 19.10 | bate random (+4.29 dB), gap MP 8.19 dB |
+| 1783633152 | L10-mut-comp16 | 55 | 3000 | 24.24 | 157 | 4396 | 28.17 | 17.99 | bate random (+6.25 dB), gap MP 3.94 dB |
+| 1783633155 | L10-mut-comp16 | 22 | 3000 | 24.47 | 175 | 4900 | 28.87 | 18.33 | bate random (+6.14 dB), gap MP 4.40 dB |
+| 1783633159 | L10-mut-comp16 | 44 | 3000 | 24.08 | 152 | 4256 | 28.27 | 17.82 | bate random (+6.27 dB), gap MP 4.19 dB |
+| 1783633161 | L10-mut-comp16 | 33 | 3000 | 24.35 | 196 | 5488 | 29.52 | 18.51 | bate random (+5.85 dB), gap MP 5.17 dB |
+| 1783633172 | L10-grad-lr01 | 11 | 3000 | 24.47 | 169 | 4732 | 28.61 | 18.55 | bate random (+5.92 dB), gap MP 4.14 dB |
+| 1783633187 | L10-grad-lr01 | 22 | 3000 | 24.57 | 191 | 5348 | 29.44 | 18.38 | bate random (+6.19 dB), gap MP 4.87 dB |
+| 1783633207 | L10-grad-lr01 | 33 | 3000 | 24.54 | 149 | 4172 | 27.96 | 18.29 | bate random (+6.25 dB), gap MP 3.42 dB |
+| 1783633212 | L10-grad-lr03 | 11 | 3000 | 24.31 | 153 | 4284 | 27.82 | 18.26 | bate random (+6.05 dB), gap MP 3.51 dB |
+| 1783633215 | L10-grad-lr01 | 55 | 3000 | 24.95 | 177 | 4956 | 28.32 | 18.32 | bate random (+6.64 dB), gap MP 3.36 dB |
+| 1783633217 | L10-grad-lr01 | 44 | 3000 | 25.13 | 185 | 5180 | 28.87 | 18.44 | bate random (+6.69 dB), gap MP 3.74 dB |
+| 1783633233 | L10-grad-lr03 | 22 | 3000 | 25.34 | 201 | 5628 | 29.34 | 18.43 | bate random (+6.91 dB), gap MP 4.01 dB |
+| 1783633249 | L10-grad-lr03 | 33 | 3000 | 25.30 | 164 | 4592 | 28.44 | 18.35 | bate random (+6.95 dB), gap MP 3.14 dB |
+| 1783633252 | L10-grad-lr03 | 44 | 3000 | 24.95 | 167 | 4676 | 28.35 | 18.24 | bate random (+6.71 dB), gap MP 3.40 dB |
+| 1783633264 | L10-grad-lr03 | 55 | 3000 | 25.26 | 183 | 5124 | 28.84 | 18.33 | bate random (+6.93 dB), gap MP 3.57 dB |
+| 1783633267 | L10-grad-lr10 | 11 | 3000 | 23.92 | 183 | 5124 | 29.01 | 18.67 | bate random (+5.26 dB), gap MP 5.09 dB |
+| 1783633271 | L10-grad-lr10 | 22 | 3000 | 24.36 | 206 | 5768 | 29.68 | 18.43 | bate random (+5.92 dB), gap MP 5.33 dB |
+| 1783633286 | L10-grad-lr10 | 33 | 3000 | 24.78 | 174 | 4872 | 28.75 | 18.40 | bate random (+6.38 dB), gap MP 3.97 dB |
+| 1783633293 | L10-grad-lr10 | 44 | 3000 | 24.75 | 135 | 3780 | 27.30 | 17.58 | bate random (+7.16 dB), gap MP 2.55 dB |
+| 1783633300 | L10-grad-lr10 | 55 | 3000 | 24.19 | 151 | 4228 | 27.76 | 17.94 | bate random (+6.26 dB), gap MP 3.57 dB |
+| 1783633324 | L10-grad-comp16 | 11 | 3000 | 25.39 | 172 | 4816 | 28.97 | 18.57 | bate random (+6.82 dB), gap MP 3.58 dB |
+| 1783633338 | L10-grad-comp16 | 44 | 3000 | 25.59 | 171 | 4788 | 28.80 | 18.26 | bate random (+7.33 dB), gap MP 3.21 dB |
+| 1783633338 | L10-grad-comp16 | 22 | 3000 | 25.66 | 210 | 5880 | 29.91 | 18.44 | bate random (+7.23 dB), gap MP 4.24 dB |
+| 1783633345 | L10-grad-comp16 | 33 | 3000 | 25.86 | 224 | 6272 | 30.05 | 18.69 | bate random (+7.17 dB), gap MP 4.19 dB |
+| 1783633353 | L10-grad-comp16 | 55 | 3000 | 25.25 | 173 | 4844 | 28.82 | 18.28 | bate random (+6.97 dB), gap MP 3.57 dB |
+
+## LEI DO METABOLISMO CRÍTICO (2026-07-09) — ver docs/LAW_METABOLISM.md
+met_c = c·σ², c ≈ 1.62·ln(M_busca) − 0.72. Derivada de teoria de valores extremos
+(um átomo sem busca captura 1·σ²; com busca sobre M geometrias, 2σ²·ln M).
+CONFIRMADO: c independe de σ (CV 4.2% em 20× de σ); c cresce com graus de liberdade
+(13.69 c/ 6 geom vs 7.25 c/ 4 geom); forma logarítmica em M (R²=0.87).
+FALSIFICADO: c NÃO cresce com ln(N_pixels) — c plano em 28× de resolução. Não é
+Donoho-Johnstone (busca LOCAL, não dicionário inteiro) ⇒ met_c independe da resolução.
+CONFOUND MORTO: população fixa em campos de tamanhos diferentes deu inclinação 5.38
+(R²=0.98) — lei falsa. Com densidade constante a tendência some.
+APLICAÇÃO: denoise sem hiperparâmetro (σ̂ por MAD, erro 3%; met=40σ̂²). Held-out
+σ∈{0.15,0.30}, 3 alvos × 3 seeds: bate MP@N-ORÁCULO em 18/18 (+2.58 dB médio); o N
+emerge sozinho (mediana 36% do N-oráculo). Perde do gauss@oráculo em foto natural
+(6/18). NÃO comparado com BM3D/wavelet — sem alegação de SOTA.
