@@ -51,6 +51,11 @@ pub trait Atom: Clone + Serialize {
 
     /// Escala típica de cada parâmetro (pro lr do Adam ser adimensional).
     fn param_scale(&self, dims: &[usize]) -> Vec<f32>;
+
+    /// Centro no espaço do campo (ordem de `dims`) — pra vizinhança espacial.
+    fn center(&self) -> Vec<f32>;
+    /// Raio do suporte — dois seres só podem se predar se os suportes se tocam.
+    fn radius(&self) -> f32;
 }
 
 /// Ajuste de amplitude em forma fechada: amp* = ⟨residual,ψ⟩/||ψ||².
@@ -170,6 +175,13 @@ impl Atom for Gabor1D {
     fn param_scale(&self, _dims: &[usize]) -> Vec<f32> {
         let s = self.sigma.max(1.0);
         vec![s, self.freq.max(1e-3), 1.0, s]
+    }
+
+    fn center(&self) -> Vec<f32> {
+        vec![self.c]
+    }
+    fn radius(&self) -> f32 {
+        2.5 * self.sigma
     }
 }
 
@@ -305,6 +317,13 @@ impl Atom for Gabor2D {
         // cada parâmetro anda em unidades da SUA escala natural
         vec![s, s, self.freq.max(1e-3), 1.0, 1.0, s]
     }
+
+    fn center(&self) -> Vec<f32> {
+        vec![self.cy, self.cx]
+    }
+    fn radius(&self) -> f32 {
+        2.5 * self.sigma
+    }
 }
 
 // ─────────────────────────── 3D — vídeo ───────────────────────────
@@ -409,6 +428,13 @@ impl Atom for Gabor3D {
 
     fn param_scale(&self, _dims: &[usize]) -> Vec<f32> {
         Vec::new()
+    }
+
+    fn center(&self) -> Vec<f32> {
+        vec![self.ct, self.cy, self.cx]
+    }
+    fn radius(&self) -> f32 {
+        2.5 * self.sigma_s.max(self.sigma_t)
     }
 }
 

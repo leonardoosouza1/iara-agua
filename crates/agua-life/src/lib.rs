@@ -63,6 +63,22 @@ pub struct LifeConfig {
     /// lr do Adam, em unidades da escala natural de cada parâmetro
     #[serde(default = "default_lr")]
     pub lr: f32,
+    /// bitmask de parâmetros de geometria CONGELADOS (bit k = param k travado).
+    /// Serve pra varrer os graus de liberdade efetivos da busca sem trocar de átomo.
+    #[serde(default)]
+    pub frozen: u32,
+    /// PREDAÇÃO POR NICHO (exclusão competitiva de Gause). Se dois seres têm
+    /// coerência |⟨ψ̂ᵢ,ψ̂ⱼ⟩| acima deste limiar, ocupam o mesmo nicho: o mais
+    /// fraco é devorado e seu patch volta ao resíduo (vira comida). 0 = desligado.
+    #[serde(default)]
+    pub predation: f32,
+    /// a caçada acontece a cada N ticks
+    #[serde(default = "one_u64")]
+    pub predation_every: u64,
+}
+
+fn one_u64() -> u64 {
+    1
 }
 
 fn default_lr() -> f32 {
@@ -93,6 +109,9 @@ impl Default for LifeConfig {
             tune_offspring: 1,
             gradient: false,
             lr: 0.03,
+            frozen: 0,
+            predation: 0.0,
+            predation_every: 1,
         }
     }
 }
@@ -313,6 +332,7 @@ impl<A: Atom> World<A> {
         const B2: f32 = 0.999;
         const EPS: f32 = 1e-8;
         let lr = self.cfg.lr;
+        let frozen = self.cfg.frozen;
         let mut delta = vec![0.0f32; A::GEOM];
         {
             let b = &mut self.beings[i];
@@ -326,7 +346,11 @@ impl<A: Atom> World<A> {
                 let mh = b.m[k] / bc1;
                 let vh = b.v[k] / bc2;
                 // passo normalizado (Adam) × escala natural do parâmetro
-                delta[k] = -lr * scale[k] * mh / (vh.sqrt() + EPS);
+                delta[k] = if frozen >> k & 1 == 1 {
+                    0.0 // parâmetro congelado: não participa da busca
+                } else {
+                    -lr * scale[k] * mh / (vh.sqrt() + EPS)
+                };
             }
         }
 
@@ -355,6 +379,98 @@ impl<A: Atom> World<A> {
         b.amp = new_amp;
         self.recon.add_scaled_patch(&unit, new_amp);
         self.residual.add_scaled_patch(&unit, -new_amp);
+    }
+
+    /// PREDAÇÃO POR NICHO: seres que ocupam o mesmo nicho (coerência alta)
+    /// não coexistem — exclusão competitiva de Gause. O mais fraco é devorado;
+    /// seu patch retorna ao resíduo e vira comida pro vencedor e pros vizinhos.
+    /// Vizinhança por grade espacial: só compara suportes que se tocam.
+    fn predate(&mut self) -> usize {
+        let theta = self.cfg.predation;
+        if theta <= 0.0 || self.beings.len() < 2 {
+            return 0;
+        }
+        let n = self.beings.len();
+        // grade: célula do tamanho do maior raio
+        let cell = self
+            .beings
+            .iter()
+            .map(|b| b.atom.radius())
+            .fold(1.0f32, f32::max)
+            .max(1.0);
+        let mut grid: std::collections::HashMap<Vec<i32>, Vec<usize>> = std::collections::HashMap::new();
+        let centers: Vec<Vec<f32>> = self.beings.iter().map(|b| b.atom.center()).collect();
+        for (i, c) in centers.iter().enumerate() {
+            let key: Vec<i32> = c.iter().map(|v| (v / cell) as i32).collect();
+            grid.entry(key).or_default().push(i);
+        }
+
+        // energia explicada agora = força na disputa pelo nicho
+        let forca = self.explained_now();
+        let mut condenado = vec![false; n];
+
+        for i in 0..n {
+            if condenado[i] {
+                continue;
+            }
+            // vizinhos: células adjacentes
+            let base: Vec<i32> = centers[i].iter().map(|v| (v / cell) as i32).collect();
+            let d = base.len();
+            let mut viz: Vec<usize> = Vec::new();
+            let offsets = (0..3usize.pow(d as u32)).map(|mut o| {
+                let mut off = vec![0i32; d];
+                for k in 0..d {
+                    off[k] = (o % 3) as i32 - 1;
+                    o /= 3;
+                }
+                off
+            });
+            for off in offsets {
+                let key: Vec<i32> = base.iter().zip(&off).map(|(b, o)| b + o).collect();
+                if let Some(v) = grid.get(&key) {
+                    viz.extend(v.iter().copied());
+                }
+            }
+            for j in viz {
+                if j <= i || condenado[j] || condenado[i] {
+                    continue;
+                }
+                // suportes precisam se tocar
+                let dist2: f32 = centers[i]
+                    .iter()
+                    .zip(&centers[j])
+                    .map(|(a, b)| (a - b) * (a - b))
+                    .sum();
+                let r = self.beings[i].atom.radius() + self.beings[j].atom.radius();
+                if dist2 > r * r {
+                    continue;
+                }
+                let ni = self.beings[i].n2.sqrt();
+                let nj = self.beings[j].n2.sqrt();
+                if ni < 1e-6 || nj < 1e-6 {
+                    continue;
+                }
+                let mu = self.beings[i].unit.dot_patch(&self.beings[j].unit).abs() / (ni * nj);
+                if mu > theta {
+                    // mesmo nicho: o mais fraco morre
+                    if forca[i] >= forca[j] {
+                        condenado[j] = true;
+                    } else {
+                        condenado[i] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        let mut mortos = 0usize;
+        for i in (0..n).rev() {
+            if condenado[i] {
+                self.kill(i);
+                mortos += 1;
+            }
+        }
+        mortos
     }
 
     /// Um tick de vida: ajustar → comer → morrer → reproduzir → chover.
@@ -395,6 +511,11 @@ impl<A: Atom> World<A> {
             b.energy = (b.energy + self.cfg.food_gain * explained - self.cfg.metabolism)
                 .min(self.cfg.max_energy);
             b.age += 1;
+        }
+
+        // 2.5 predação por nicho (exclusão competitiva)
+        if self.cfg.predation > 0.0 && self.tick % self.cfg.predation_every == 0 {
+            self.predate();
         }
 
         // 3. morte (fome): varre de trás pra frente por causa do swap_remove

@@ -294,3 +294,20 @@ APLICAÇÃO: denoise sem hiperparâmetro (σ̂ por MAD, erro 3%; met=40σ̂²). 
 σ∈{0.15,0.30}, 3 alvos × 3 seeds: bate MP@N-ORÁCULO em 18/18 (+2.58 dB médio); o N
 emerge sozinho (mediana 36% do N-oráculo). Perde do gauss@oráculo em foto natural
 (6/18). NÃO comparado com BM3D/wavelet — sem alegação de SOTA.
+
+## AS LEIS DA POPULAÇÃO (2026-07-09) — ver docs/LAWS.md
+LEI 2 (a grande): c = 2.007·dof + 1.067 (R²=0.9912) ⇒ met_c = σ²·(1 + 2·dof).
+Dois por grau de liberdade = penalidade do AIC. O metabolismo crítico É o Critério
+de Akaike, emergindo de fome e morte. Intercepto 1.07 = âncora teórica (átomo sem
+busca captura 1·σ²).
+LEI 4: Morozov emergente — a população para em ‖r‖²/n ÷ σ² = 0.99/1.01/1.03/1.02
+sem ninguém informar σ.
+LEI 3: equipartição, E[explicado]/met = 1.00-1.07 (KKT sem otimizador).
+LEI 5: universalidade CLT — c igual p/ Gauss/Laplace/Uniforme (±1.3%); quebra só
+com ruído ESPARSO; parâmetro de controle é k = p·|suporte|, não a cauda.
+LEI 6 (transição de fase): H2 FALSIFICADA — a população NÃO se ortogonaliza, fica
++96 a +167% MAIS coerente que aleatória. A colinearidade infla c (11.87 vs 1).
+Predação por nicho (Gause) restaura: θ* ≈ 0.50 é coerência crítica; abaixo dela
+c → 1 e a lei vale. A HARMONIA NÃO EMERGE, precisa ser imposta.
+LEI 7 (iso-N): predação ganha +0.29 dB a N igual (3/3 seeds, N=120); PSNR/átomo
+dobra; denoise mantém qualidade com -41% de átomos.
