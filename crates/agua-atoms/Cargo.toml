@@ -1,0 +1,9 @@
+[package]
+name = "agua-atoms"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+agua-core.workspace = true
+serde.workspace = true

@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/agua-core",
+    "crates/agua-atoms",
+    "crates/agua-life",
+    "crates/agua-metrics",
+    "crates/agua-telemetry",
+    "crates/agua-lab",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Leonardo <leonardo.souzadev@gmail.com>"]
+license = "MIT"
+
+[workspace.dependencies]
+agua-core = { path = "crates/agua-core" }
+agua-atoms = { path = "crates/agua-atoms" }
+agua-life = { path = "crates/agua-life" }
+agua-metrics = { path = "crates/agua-metrics" }
+agua-telemetry = { path = "crates/agua-telemetry" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

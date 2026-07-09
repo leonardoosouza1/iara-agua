@@ -1,0 +1,20 @@
+[package]
+name = "agua-lab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "agua-lab"
+path = "src/main.rs"
+
+[dependencies]
+agua-core.workspace = true
+agua-atoms.workspace = true
+agua-life.workspace = true
+agua-metrics.workspace = true
+agua-telemetry.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+image.workspace = true

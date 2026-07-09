@@ -1,0 +1,10 @@
+[package]
+name = "agua-life"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+agua-core.workspace = true
+agua-atoms.workspace = true
+serde.workspace = true
