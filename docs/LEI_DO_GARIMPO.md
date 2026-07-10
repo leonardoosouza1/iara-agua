@@ -124,3 +124,36 @@ Apliquei (C) nos pesos treinados de verdade (`bytebrain/research/poda_metabolica
 **Padrão limpo: quanto mais agressiva a poda, mais o critério de resíduo bate os heurísticos de importância** (Wanda, magnitude). No bloco 6, k=64: 0.556 vs 0.631 (Wanda). No regime leve todos convergem e o Wanda ganha de raspão por arredondamento.
 
 **Honesto:** isto é reconstrução da SAÍDA DA CAMADA, não perplexidade do modelo inteiro — medir a perplexidade exigiria re-rodar o forward completo com as camadas podadas, o próximo passo real. E "greedy-resíduo > importância-heurística" é um resultado conhecido de sparse approximation; o que a lei acrescenta é o *critério de parada* (que precisa de ruído pra valer). A contribuição honesta: (a) confirma que o critério de resíduo vale em pesos reais, não só random features; (b) delimita quando a auto-seleção de N funciona.
+
+---
+
+## Adendo 2 — poda em PERPLEXIDADE REAL do LM: NEGATIVO (2026-07-10)
+
+`bytebrain/research/poda_perplexidade.py`. Apliquei a poda metabólica nos
+neurônios ocultos das MLPs do ByteBrain 40M e medi a bpb REAL em bytes held-out
+(não reconstrução de camada), contra Wanda (SOTA one-shot) e magnitude.
+
+| esparsidade | metabólica | Wanda | modelo cheio |
+|---|---|---|---|
+| 30% | 1.604 | **1.192** | 1.122 |
+| 50% | 2.594 | **1.413** | |
+| 70% | 3.808 | **2.046** | |
+
+❌ **A poda metabólica PERDE do Wanda em todas as esparsidades**, decisivamente.
+O refit dos pesos de saída não ajudou (e minha implementação de refit era no-op).
+
+**Por que o resultado da reconstrução de camada (adendo 1, onde eu ganhava) NÃO
+transferiu:**
+1. Na perplexidade, TODAS as camadas são podadas juntas e os erros COMPÕEM pela
+   profundidade.
+2. Reconstruir o output L2 de uma camada isolada ≠ preservar o que as camadas
+   SEGUINTES precisam. O greedy-resíduo escolhe um subconjunto pior pra função do
+   modelo inteiro.
+3. Meu desconto-de-redundância heurístico ativamente atrapalhou.
+
+**Lição honesta e útil:** *a MSE de reconstrução de camada é um proxy ENGANOSO
+para a qualidade de poda de LLM.* Um método pode ganhar reconstruindo uma camada e
+perder na perplexidade real. A importância por-neurônio ciente-de-ativação do
+Wanda é melhor pro problema real. A Lei do Garimpo continua válida como TEORIA
+(RIC, finanças, seleção de variáveis) — mas sua aplicação à poda de LLM não bate o
+SOTA. A aposta prática falhou; registro sem maquiar.
