@@ -1,46 +1,96 @@
-# iara-água — solver universal por sobrevivência
+# iara-água
 
-> **A IARA madura:** joga-se uma população de seres-átomos sobre um sinal (imagem, áudio, texto…); tentando **sobreviver** — comida = resíduo local — eles se auto-organizam **como água achando o caminho** e a soma dos vivos **É** a reconstrução/geração. Visão completa: `../IARA_VISAO_SERES_COMO_AGUA.md`.
+> Uma população de átomos famintos come o resíduo de um sinal. Quem explica mais
+> energia do que custa existir, sobrevive. A soma dos vivos **é** a resposta.
+> Ninguém programa a solução — só a pressão de sobreviver.
 
-## Quickstart
+Workspace Rust headless, determinístico, rastreável. Materializa a visão
+`../IARA_VISAO_SERES_COMO_AGUA.md`. Este README é o mapa honesto: **o que ganha,
+o que perde, e as leis que sobraram depois de eu matar as minhas próprias
+hipóteses.**
 
-```bash
-cargo test --release                                        # 23 testes
-cargo run --release --bin agua-lab -- demo                  # imagem ~4s
-cargo run --release --bin agua-lab -- demo-audio            # áudio (gera .wav ouvível)
-cargo run --release --bin agua-lab -- demo-video            # vídeo ~16s
-cargo run --release --bin agua-lab -- run \
-    --config configs/exp001_image_survival.toml             # 3 seeds
-# exp002 = áudio (WAV real ou sintético) · exp003 = vídeo
+## Em uma imagem
+
+```
+   sinal (imagem/áudio/vídeo)
+        │
+        ▼
+   ┌─────────────────────────────────────────┐
+   │  🌧️ nasce onde falta explicar (resíduo)  │
+   │  🍽️ come o pedaço que cobre               │  ← o laço
+   │  🔧 ajusta a geometria (gradiente/mutação)│
+   │  💀 morre se explica < 2σ²·ln(alternativas)│
+   │  ⏹️ para quando o resíduo = nível do ruído │  (Morozov)
+   └─────────────────────────────────────────┘
+        │
+        ▼
+   os sobreviventes SÃO a codificação
+   (e quantos são EMERGE — ninguém escolhe N)
 ```
 
-Cada run gera `runs/<exp>/run-<ts>-s<seed>/` (manifest, metrics.jsonl, snapshots por modalidade — PNG/waveform/WAV/frames —, population.json = a codificação, summary.json com baselines) e appenda 1 linha no `JOURNAL.md`.
+## O que GANHA ✅
 
-## Modalidades — a MESMA física
+| | resultado |
+|---|---|
+| **Denoise sem hiperparâmetro** | σ estimado do sinal, N emerge da lei. Bate matching pursuit com N-oráculo **737/737**, e VisuShrink clássico **81/81** (+3.8 dB). `agua-lab denoise --auto` |
+| **Geração por prior** | codebook de imagem real → textura nova (não cópia), costura −87% vs aleatório. `agua-lab generate` |
+| **Átomo não-linear** | oclusão, onde o matching pursuit *nem se define*. 6/9 vs melhor linear. `agua-lab occlusion` |
+| **Roteador poliglota** | línguas (textura/liso/borda) competem, cada região vai pra língua certa, roteador **emerge**. +5.5 dB na borda. `agua-lab polyglot` |
 
-`agua-life` é genérico (`World<A: Atom>`) e não sabe o que é pixel, amostra ou frame. Nova modalidade = implementar o trait `Atom` (render/mutate/rain) — zero mudança na física.
+## O que PERDE ❌ (medido, sem maquiar)
 
-| Modalidade | Átomo | Alvo | Status |
-|---|---|---|---|
-| Imagem | `Gabor2D` | PNG ou sintético | ✅ validado |
-| Áudio | `Gabor1D` (grão) | WAV PCM16 ou sintético | ✅ validado |
-| Vídeo | `Gabor3D` (espaço-temporal) | sintético (frames PNG na bateria) | ✅ validado |
-| Texto/embedding | átomo em espaço latente | prior importado | F4 (roadmap) |
+| | verdade |
+|---|---|
+| **Compressão** | JPEG ganha 5–18× em bytes, mesmo com o codec quantizado. Provado duas vezes. A sobrevivência **não é um compressor**. |
+| **Poda de LLM** | Wanda ganha na perplexidade real do ByteBrain (1.19 vs 1.60 bpb). Reconstrução de camada era proxy enganoso. |
+
+## As LEIS (cada uma com predição feita ANTES da medida)
+
+- **Metabolismo crítico** — `met_c = σ²·(1 + 2·dof)`. Um átomo que não busca captura 1·σ²; cada grau de liberdade custa ≈2σ². **Dois por parâmetro é a penalidade do AIC.** A multidão redescobre seleção de modelo por fome. (`docs/LAWS.md`, R²=0.98, n=990)
+- **Lei do Garimpo** — `penalidade = 2σ²·ln M`. É o RIC (Foster & George 1994). Vale pra finanças (8192 backtests → Sharpe 3.8 do acaso), seleção de variáveis e — como teoria — poda. (`docs/LEI_DO_GARIMPO.md`)
+- **Morozov emergente** — a população para exatamente no nível do ruído sem saber σ. Cross-modal. (`docs/LAWS.md`)
+- **Sinapse = matriz de Gram** — `G_ij = ⟨ψ_i,ψ_j⟩` é o peso sináptico; o acoplamento alterna excita/inibe com a distância = **chapéu-mexicano** (córtex visual). A susceptibilidade a um disparo dispara 1600× no regime colinear (criticalidade) — a mesma colinearidade que infla o metabolismo. (`docs/LEIS_SINAPSE.md`)
+- **Transição de fase da harmonia** — a população fica coerente, não ortogonal; a predação impõe harmonia numa transição abrupta em θ*≈0.5. (`docs/LAWS.md`)
+
+## O que morreu (o que dá confiança no resto)
+
+γ universal · Donoho-Johnstone · predação que paga · Morozov-substitui-k · frações contínuas · alfabeto de frações · espelho espectral (era trivial) · ressonância linear · poda em LLM. **Nove hipóteses minhas, falsificadas com teste honesto.**
 
 ## Crates
 
-| Crate | Papel | Deps |
-|---|---|---|
-| `agua-core` | Field N-dim, Patch por runs, RNG determinístico, hotspot sampler, PSNR | zero |
-| `agua-atoms` | trait `Atom` + Gabor 1D/2D/3D, fit de amplitude em forma fechada | core |
-| `agua-life` | A física (genérica): comer/morrer/reproduzir/chover/ajustar | core, atoms |
-| `agua-metrics` | Baselines obrigatórios (genéricos): random, matching pursuit; JPEG | core, atoms |
-| `agua-telemetry` | RunDir, manifest, JSONL, PNG/WAV/waveform, JOURNAL.md | core |
-| `agua-lab` | Runner: config TOML → dispatch de modalidade → run rastreável | todos |
+```
+agua-core       Field N-dim · Patch esparso · RNG determinístico · hotspot sampler
+agua-atoms      trait Atom + Gabor 1D/2D/3D · gradiente analítico validado
+agua-life       O LAÇO (genérico): World<A>::step — nascer/ajustar/morrer/predar
+agua-metrics    baselines: random · matching pursuit · JPEG
+agua-codec      população → bytes (.agua): fp16, Q12, Q8
+agua-telemetry  cada run rastreável: manifest+git · metrics.jsonl · PNG/WAV
+agua-lab        harness: run · denoise · generate · occlusion · polyglot · synapse
+                · resonance · probe · law2..law9
+```
 
-## Documentos
+## Rodar
 
-- `docs/ARCHITECTURE.md` — design, invariantes, decisões
-- `docs/ROADMAP.md` — fases F0→F6 com critérios de aceite
-- `docs/EXPERIMENT_PROTOCOL.md` — regras de honestidade (multi-seed, baselines, falso-positivo)
-- `CLAUDE.md` — guia pro agente que continuar este projeto
+```bash
+cargo test --release                                    # 33 testes
+cargo run --release --bin agua-lab -- denoise --target synthetic --sigma 0.2 --auto
+cargo run --release --bin agua-lab -- law2              # a lei do metabolismo
+cargo run --release --bin agua-lab -- synapse           # as leis da sinapse
+cargo run --release --bin agua-lab -- polyglot          # o roteador que emerge
+```
+
+## Docs
+
+- `docs/O_FLUXO.md` — o seletor por sobrevivência unificado (denoise=seleção=poda)
+- `docs/LAWS.md` · `docs/LEI_DO_GARIMPO.md` · `docs/LEIS_SINAPSE.md` — as leis
+- `docs/PONTE_LINGUAS.md` — a ponte entre representações (tese IARA-Router)
+- `docs/ROADMAP.md` — F0..F6 todos fechados
+- `docs/EXPERIMENT_PROTOCOL.md` — as regras de honestidade (cada uma tem um cadáver)
+- `docs/VISAO_BYTE_HORMONAL.md` — a próxima fronteira (fora da curva, aterrada)
+
+## O que isto é, honestamente
+
+Uma **contribuição conceitual**: leis novas medidas (fome = AIC, garimpo = RIC,
+sinapse = Gram) + duas demos que funcionam (denoise, geração). **Não** é um
+compressor nem um podador que bate o estado-da-arte — e onde não é, está escrito.
+A disciplina de matar o próprio falso-positivo é o método, não o acidente.
