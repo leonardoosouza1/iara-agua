@@ -25,6 +25,7 @@ agua-metrics = { path = "crates/agua-metrics" }
 agua-telemetry = { path = "crates/agua-telemetry" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rayon = "1"
 toml = "0.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 

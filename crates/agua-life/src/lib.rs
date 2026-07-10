@@ -193,22 +193,40 @@ impl<A: Atom> World<A> {
                 return;
             }
             // K sementes caem na vaga; só a que EXPLICA MAIS resíduo vinga.
-            let mut best: Option<(f32, A)> = None;
-            for _ in 0..k {
-                let idx = sampler.sample(&mut self.rng);
-                let pos: Vec<f32> = unflatten(&self.target.dims, idx)
+            // Sorteia os K átomos SEQUENCIALMENTE (RNG determinístico), depois
+            // avalia em PARALELO (render+fit são puros) — determinismo preservado.
+            let cands: Vec<A> = (0..k)
+                .map(|_| {
+                    let idx = sampler.sample(&mut self.rng);
+                    let pos: Vec<f32> =
+                        unflatten(&self.target.dims, idx).into_iter().map(|v| v as f32).collect();
+                    A::rain_at(&pos, &self.bounds, &mut self.rng)
+                })
+                .collect();
+            self.evals += k as u64;
+            let dims = &self.target.dims;
+            let resid = &self.residual;
+            let best = if k >= 8 {
+                use rayon::prelude::*;
+                cands
+                    .into_par_iter()
+                    .filter_map(|a| {
+                        let unit = a.render_unit(dims);
+                        fit_amp(&unit, resid).map(|(_, e)| (e, a))
+                    })
+                    .reduce_with(|x, y| if x.0 >= y.0 { x } else { y })
+            } else {
+                cands
                     .into_iter()
-                    .map(|v| v as f32)
-                    .collect();
-                let atom = A::rain_at(&pos, &self.bounds, &mut self.rng);
-                self.evals += 1;
-                let unit = atom.render_unit(&self.target.dims);
-                if let Some((_, explained)) = fit_amp(&unit, &self.residual) {
-                    if best.as_ref().map_or(true, |(e, _)| explained > *e) {
-                        best = Some((explained, atom));
-                    }
-                }
-            }
+                    .filter_map(|a| {
+                        let unit = a.render_unit(dims);
+                        fit_amp(&unit, resid).map(|(_, e)| (e, a))
+                    })
+                    .fold(None, |acc: Option<(f32, A)>, cur| match acc {
+                        Some(b) if b.0 >= cur.0 => Some(b),
+                        _ => Some(cur),
+                    })
+            };
             if let Some((_, atom)) = best {
                 self.spawn_counted(atom, false);
             }

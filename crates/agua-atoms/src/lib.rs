@@ -26,7 +26,7 @@ pub struct AtomBounds {
 
 /// Contrato do ser-átomo. A física (`agua-life`) só conhece isto —
 /// implementar este trait = nova modalidade, física intocada.
-pub trait Atom: Clone + Serialize {
+pub trait Atom: Clone + Serialize + Send + Sync {
     /// nº de parâmetros da codificação (geometria + 1 amplitude)
     const PARAMS: usize;
     /// Nasce da chuva numa posição (coords na ordem de `dims`).

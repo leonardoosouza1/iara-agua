@@ -8,3 +8,4 @@ license.workspace = true
 agua-core.workspace = true
 agua-atoms.workspace = true
 serde.workspace = true
+rayon = { workspace = true }
