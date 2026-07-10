@@ -398,3 +398,10 @@ A sobrevivência NÃO é compressor; valor está nas leis/denoise/geração/poda
 PERF: 96²→11.7k evals/s, 256²→4.8k, RSS 42→145MB, ~O(N·suporte)/tick.
 RAYON na chuva (determinismo preservado) mas NÃO move o hot path (feed Gauss-Seidel
 sequencial). Paralelizar exigiria Jacobi (convergência aberta). Medi antes de otimizar.
+
+## F2 — CfC + RESSONÂNCIA (2026-07-10) — docs/F2_RESSONANCIA.md
+CfC portado, paridade EXATA com Universe (max|diff|=0). Ressonância como equação:
+decay* = 1.78·f^0.406, R²=0.992. ⚠ PREVI α≈1 (linear), deu α≈0.4 (potência sublinear).
+Monótona (confirma Universe bat.10/12) mas expoente ~0.4 novo. Estável em σ∈{0.1,0.3,0.6},
+degenera em σ=1. Não é bias-variância simples; explicação exata em aberto (ganho do
+integrador leaky ∝ 1/√(decay²+ω²)). Harmonia (§7) já respondida na Lei 6.

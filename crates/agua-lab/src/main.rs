@@ -37,6 +37,7 @@ mod law9;
 mod generate;
 mod occlusion;
 mod probe;
+mod resonance;
 mod targets;
 use targets::{synthetic_audio, synthetic_image, synthetic_video};
 
@@ -302,6 +303,7 @@ fn main() {
         Some("probe") => probe::run(&args),
         Some("occlusion") => occlusion::run(&args),
         Some("generate") => generate::run(&args),
+        Some("resonance") => resonance::run(&args),
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),
         Some("demo-video") => demo("video", 400),
