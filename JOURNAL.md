@@ -412,3 +412,13 @@ Gerador de painel HTML autocontido de qualquer bateria (lê summary.json). 6 lei
 máquina do Leonardo (sandbox mata GUI exit 144, browser rejeitado). Este é o headless.
 
 ## TODOS OS F FECHADOS (2026-07-10): F0✅ F1✅ F2✅ F3✅ F4✅ F5✅ F6✅
+
+## PONTE ENTRE LÍNGUAS (2026-07-10) — docs/PONTE_LINGUAS.md
+Tese IARA-Router concreta: dicionário poliglota (gabor=textura, blob=liso, borda=degrau)
+onde o roteamento por região EMERGE da competição (sem roteador treinado). Valor é LOCAL:
+degrau poliglota 20.26 vs gabor 14.73 = +5.53 dB (Gabor ringa na borda!); liso +1.57;
+textura +0.40. PSNR GLOBAL quase não mexe (19.60 vs 19.43) — a vitória está na região
+especializada, escondida na média. Roteamento correto: degrau→borda, textura→gabor.
+REGIME DE VALIDADE (Lei do Garimpo cobra): homogêneo → poliglota PERDE (16.9 vs 19.6),
+imposto de busca 2σ²·ln(M·C) à toa. LEI: especialização paga em unidades DISJUNTAS;
+transferência (generalista, M74) paga em unidades COMPARTILHADAS.

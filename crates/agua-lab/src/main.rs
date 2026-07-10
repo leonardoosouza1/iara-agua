@@ -36,6 +36,7 @@ mod law8;
 mod law9;
 mod generate;
 mod occlusion;
+mod polyglot;
 mod probe;
 mod resonance;
 mod targets;
@@ -304,6 +305,7 @@ fn main() {
         Some("occlusion") => occlusion::run(&args),
         Some("generate") => generate::run(&args),
         Some("resonance") => resonance::run(&args),
+        Some("polyglot") => polyglot::run(&args),
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),
         Some("demo-video") => demo("video", 400),
