@@ -492,6 +492,63 @@ fn kind_codec(args: &[String]) {
     );
 }
 
+
+fn kind_gamma_fdr(args: &[String]) {
+    // γ = met_ótimo / met_c corresponde a um QUANTIL FIXO da distribuição de
+    // energia explicada pelo ruído? Se sim, γ é um controle de falsa-sobrevivência.
+    let modality = args_(args, "--modality", "image");
+    let size = argu(args, "--size", 96) as usize;
+    let sigma = argf(args, "--sigma", 0.15);
+    let ticks = argu(args, "--ticks", 800);
+    let seed = argu(args, "--seed", 11);
+    let target = args_(args, "--target", "synthetic");
+
+    let dims: Vec<usize> = if modality == "audio" { vec![size] } else { vec![size, size] };
+
+    // 1) distribuição de energia explicada em RUÍDO PURO (normalizada por σ²)
+    let noise = ruido(&dims, sigma, seed, "gauss");
+    let var = noise.data.iter().map(|v| v*v).sum::<f32>() / noise.len() as f32;
+    let mut cfg = cfg_c(8, true, 0.0, true);
+    cfg.cap = 1000; cfg.init = 400;
+    let dist: Vec<f32> = if modality == "audio" {
+        let w = run_world::<Gabor1D>(noise, cfg, &bounds1(), seed, ticks);
+        w.explained_now().iter().map(|e| e/var).collect()
+    } else {
+        let w = run_world::<Gabor2D>(noise, cfg, &bounds2(), seed, ticks);
+        w.explained_now().iter().map(|e| e/var).collect()
+    };
+    let mut d = dist.clone();
+    d.sort_by(|a,b| a.partial_cmp(b).unwrap());
+    let met_c = if d.is_empty() {0.0} else { d.iter().sum::<f32>()/d.len() as f32 }; // média = c
+
+    // 2) met ótimo para denoise no MESMO σ (varre k = met/σ²)
+    let clean = load_target(&modality, &target, size);
+    let noisy = add_noise(&clean, sigma, seed ^ 0x0157);
+    let (noisy0, dc) = zero_mean(&noisy);
+    let ks = [4.0f32, 8.0, 12.0, 16.0, 20.0, 25.0, 30.0, 40.0, 55.0, 75.0, 100.0];
+    let (mut best_k, mut best_p) = (0.0f32, f32::MIN);
+    for &k in &ks {
+        let met = k*sigma*sigma;
+        let p = if modality == "audio" {
+            let mut w = run_world::<Gabor1D>(noisy0.clone(), cfg_denoise(met), &bounds1(), seed, ticks);
+            w.rebuild(); let mut r=w.recon.clone(); for v in r.data.iter_mut(){*v+=dc;}
+            psnr(mse(&r,&clean),1.0)
+        } else {
+            let mut w = run_world::<Gabor2D>(noisy0.clone(), cfg_denoise(met), &bounds2(), seed, ticks);
+            w.rebuild(); let mut r=w.recon.clone(); for v in r.data.iter_mut(){*v+=dc;}
+            psnr(mse(&r,&clean),1.0)
+        };
+        if p>best_p { best_p=p; best_k=k; }
+    }
+    // 3) em que QUANTIL da distribuição de ruído cai met_ótimo? (fração morta)
+    let met_opt = best_k; // já em unidades de σ² (= energia explicada / σ²)
+    let killed = d.iter().filter(|&&e| e < met_opt).count() as f32 / d.len().max(1) as f32;
+    let gamma = if met_c>0.0 { met_opt/met_c } else {0.0};
+    println!("{}", json!({"kind":"gamma_fdr","modality":modality,"target":target,"sigma":sigma,
+        "seed":seed,"met_c":met_c,"met_opt":met_opt,"gamma":gamma,
+        "frac_ruido_morto":killed,"frac_ruido_vivo":1.0-killed,"best_psnr":best_p,"n_dist":d.len()}));
+}
+
 pub fn run(args: &[String]) {
     match args_(args, "--kind", "c").as_str() {
         "c" => kind_c(args),
@@ -503,6 +560,7 @@ pub fn run(args: &[String]) {
         "adapt" => kind_adapt(args),
         "perf" => kind_perf(args),
         "codec" => kind_codec(args),
+        "gamma_fdr" => kind_gamma_fdr(args),
         k => {
             eprintln!("kind desconhecido: {k}");
             std::process::exit(2);
