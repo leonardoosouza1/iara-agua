@@ -318,3 +318,21 @@ CORREÇÃO LEI 2: inclinação satura em ~2.2 (não 2.007 — aquilo era um orç
 o INTERCEPTO é que converge a 1.0 em qualquer orçamento (âncora teórica).
 LEI 8 REFUTADA por mim: dof_eff via razão de participação erra -44% no 2D; o 1D tem
 posto CHEIO. Causa real do desvio 1D = convergência lenta (c sobe 7.50→8.34).
+| 1783643874 | exp001-image-survival | 7 | 1200 | 40.92 | 3000 | 84000 | 53.79 | 26.29 | bate random (+14.63 dB), gap MP 12.88 dB |
+
+## FRAÇÕES + FALSIFICAÇÕES (2026-07-09) — docs/FRACOES.md
+IARA_NUMEROS_COMO_FRACOES: (B) fração contínua REFUTADA (9.26 dB a 10.8 B vs 26.9 da
+uniforme a 10.5 B; fp16 40.82 a 14 B). (A) alfabeto de frações REFUTADA PELO CONTROLE:
+K-means LIVRE (17.48 dB) > K-means racional (14.70) no mesmo K — o mérito é do codebook.
+ACHADO REAL: bug de escala da amplitude no agua-codec (range fixo ±4 vs amps ~1e-3).
+Escala adaptativa: 8 bits 7.06 → 25.26 dB (+18.2 dB). Corrigido + teste de regressão.
+
+MORTES DE POSITIVOS MEUS:
+- Regra "escolher met por Morozov" NÃO substitui k: com σ ORÁCULO o áudio não melhora
+  (22.36 vs 22.14) e a IMAGEM piora (26.70 vs 28.08) — o "+0.47 dB" era artefato do
+  viés do estimador MAD (+1.4%). Morozov DESCREVE o ótimo (razão≈1) mas impô-lo não o acha.
+- Predação (Lei 7): o +0.29 dB NÃO REPLICA em outro alvo/orçamento (law8, sinal simples:
+  N=120 dá -2.72 dB, 0/3). Ganho de representação era ruído de config. Só a eficiência
+  (menos átomos p/ mesma qualidade) sobrevive.
+- γ = met_opt/met_c: 3.52 (imagem) vs 2.51 (áudio); predição cross-modal de k errou 29%.
+  Consistente-mas-fraco. Morozov no ótimo: 1.04 (img) e 1.03 (áudio) — Lei 4 é cross-modal.

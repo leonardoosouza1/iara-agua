@@ -226,8 +226,8 @@ fn dq_log(q: u32, lo: f32, hi: f32, bits: u32) -> f32 {
 
 /// Contrato: como um átomo vira bits (e volta). Cada modalidade implementa.
 pub trait Codable: Sized {
-    fn encode(&self, amp: f32, w: &mut BitWriter, p: Profile, dims: &[usize], b: &AtomBounds);
-    fn decode(r: &mut BitReader, p: Profile, dims: &[usize], b: &AtomBounds) -> (Self, f32);
+    fn encode(&self, amp: f32, w: &mut BitWriter, p: Profile, dims: &[usize], b: &AtomBounds, s: AmpScale);
+    fn decode(r: &mut BitReader, p: Profile, dims: &[usize], b: &AtomBounds, s: AmpScale) -> (Self, f32);
     fn render_unit_dyn(&self, dims: &[usize]) -> Patch;
 }
 
@@ -235,7 +235,7 @@ const PI: f32 = std::f32::consts::PI;
 const TAU: f32 = std::f32::consts::TAU;
 
 impl Codable for Gabor2D {
-    fn encode(&self, amp: f32, w: &mut BitWriter, p: Profile, dims: &[usize], b: &AtomBounds) {
+    fn encode(&self, amp: f32, w: &mut BitWriter, p: Profile, dims: &[usize], b: &AtomBounds, s: AmpScale) {
         let (pb, fb, ab, sb, mb) = p.bits();
         w.put(q_lin(self.cy, 0.0, dims[0] as f32, pb), pb);
         w.put(q_lin(self.cx, 0.0, dims[1] as f32, pb), pb);
@@ -243,10 +243,10 @@ impl Codable for Gabor2D {
         w.put(q_lin(self.theta.rem_euclid(PI), 0.0, PI, ab), ab);
         w.put(q_lin(self.phase.rem_euclid(TAU), 0.0, TAU, ab), ab);
         w.put(q_log(self.sigma, b.sigma_min, b.sigma_max, sb), sb);
-        w.put(q_lin(amp, -AMP_RANGE, AMP_RANGE, mb), mb);
+        w.put(q_lin(amp, s.lo, s.hi, mb), mb);
     }
 
-    fn decode(r: &mut BitReader, p: Profile, dims: &[usize], b: &AtomBounds) -> (Self, f32) {
+    fn decode(r: &mut BitReader, p: Profile, dims: &[usize], b: &AtomBounds, s: AmpScale) -> (Self, f32) {
         let (pb, fb, ab, sb, mb) = p.bits();
         let cy = dq_lin(r.get(pb), 0.0, dims[0] as f32, pb);
         let cx = dq_lin(r.get(pb), 0.0, dims[1] as f32, pb);
@@ -254,7 +254,7 @@ impl Codable for Gabor2D {
         let theta = dq_lin(r.get(ab), 0.0, PI, ab);
         let phase = dq_lin(r.get(ab), 0.0, TAU, ab);
         let sigma = dq_log(r.get(sb), b.sigma_min, b.sigma_max, sb);
-        let amp = dq_lin(r.get(mb), -AMP_RANGE, AMP_RANGE, mb);
+        let amp = dq_lin(r.get(mb), s.lo, s.hi, mb);
         (Gabor2D { cx, cy, freq, theta, phase, sigma }, amp)
     }
 
@@ -265,7 +265,7 @@ impl Codable for Gabor2D {
 }
 
 impl Codable for Gabor1D {
-    fn encode(&self, amp: f32, w: &mut BitWriter, p: Profile, dims: &[usize], b: &AtomBounds) {
+    fn encode(&self, amp: f32, w: &mut BitWriter, p: Profile, dims: &[usize], b: &AtomBounds, s: AmpScale) {
         let (pb, fb, ab, sb, mb) = p.bits();
         // áudio tem muitas amostras: posição precisa de mais bits
         let pb = if pb < 32 && pb < 20 { pb.max(16) } else { pb };
@@ -273,17 +273,17 @@ impl Codable for Gabor1D {
         w.put(q_log(self.freq, b.freq_min, b.freq_max, fb), fb);
         w.put(q_lin(self.phase.rem_euclid(TAU), 0.0, TAU, ab), ab);
         w.put(q_log(self.sigma, b.sigma_min, b.sigma_max, sb), sb);
-        w.put(q_lin(amp, -AMP_RANGE, AMP_RANGE, mb), mb);
+        w.put(q_lin(amp, s.lo, s.hi, mb), mb);
     }
 
-    fn decode(r: &mut BitReader, p: Profile, dims: &[usize], b: &AtomBounds) -> (Self, f32) {
+    fn decode(r: &mut BitReader, p: Profile, dims: &[usize], b: &AtomBounds, s: AmpScale) -> (Self, f32) {
         let (pb, fb, ab, sb, mb) = p.bits();
         let pb = if pb < 32 && pb < 20 { pb.max(16) } else { pb };
         let c = dq_lin(r.get(pb), 0.0, dims[0] as f32, pb);
         let freq = dq_log(r.get(fb), b.freq_min, b.freq_max, fb);
         let phase = dq_lin(r.get(ab), 0.0, TAU, ab);
         let sigma = dq_log(r.get(sb), b.sigma_min, b.sigma_max, sb);
-        let amp = dq_lin(r.get(mb), -AMP_RANGE, AMP_RANGE, mb);
+        let amp = dq_lin(r.get(mb), s.lo, s.hi, mb);
         (Gabor1D { c, freq, phase, sigma }, amp)
     }
 
@@ -293,8 +293,30 @@ impl Codable for Gabor1D {
     }
 }
 
-/// Amplitudes vivem em [-4, 4] na prática (sinais em [-1,1] zero-médios).
+/// Amplitudes vivem em [-4, 4] NO PIOR CASO — mas na prática são ~1e-3, e um
+/// range fixo desperdiça todos os níveis de quantização (medido: 8 bits com
+/// range fixo dá 7.06 dB; com range ADAPTATIVO, 25.26 dB — +18 dB).
+/// O range real vai no header (8 bytes, custo O(1) na população inteira).
 const AMP_RANGE: f32 = 4.0;
+
+/// Escala de amplitude do arquivo: [lo, hi] reais da população.
+#[derive(Clone, Copy, Debug)]
+pub struct AmpScale {
+    pub lo: f32,
+    pub hi: f32,
+}
+
+impl AmpScale {
+    pub fn from_amps(amps: &[f32]) -> Self {
+        let lo = amps.iter().copied().fold(f32::INFINITY, f32::min);
+        let hi = amps.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        if !lo.is_finite() || !hi.is_finite() || hi - lo < 1e-12 {
+            AmpScale { lo: -AMP_RANGE, hi: AMP_RANGE }
+        } else {
+            AmpScale { lo, hi }
+        }
+    }
+}
 
 // ─────────────────────────── arquivo .agua ───────────────────────────
 
@@ -324,10 +346,15 @@ pub fn encode<A: Codable>(
     for v in [bounds.freq_min, bounds.freq_max, bounds.sigma_min, bounds.sigma_max] {
         head.extend_from_slice(&v.to_le_bytes());
     }
+    // escala ADAPTATIVA da amplitude (8 B no header; vale +18 dB a 8 bits)
+    let amps: Vec<f32> = atoms.iter().map(|(_, a)| *a).collect();
+    let scale = AmpScale::from_amps(&amps);
+    head.extend_from_slice(&scale.lo.to_le_bytes());
+    head.extend_from_slice(&scale.hi.to_le_bytes());
 
     let mut w = BitWriter::default();
     for (a, amp) in atoms {
-        a.encode(*amp, &mut w, profile, dims, bounds);
+        a.encode(*amp, &mut w, profile, dims, bounds, scale);
     }
     let mut bytes = head;
     bytes.extend_from_slice(&w.finish());
@@ -366,11 +393,16 @@ pub fn decode<A: Codable>(bytes: &[u8]) -> Result<Decoded<A>, String> {
     }
     let bounds =
         AtomBounds { freq_min: bv[0], freq_max: bv[1], sigma_min: bv[2], sigma_max: bv[3] };
+    let lo = f32::from_le_bytes(bytes[p..p + 4].try_into().unwrap());
+    p += 4;
+    let hi = f32::from_le_bytes(bytes[p..p + 4].try_into().unwrap());
+    p += 4;
+    let scale = AmpScale { lo, hi };
 
     let mut r = BitReader::new(&bytes[p..]);
     let mut atoms = Vec::with_capacity(n);
     for _ in 0..n {
-        atoms.push(A::decode(&mut r, profile, &dims, &bounds));
+        atoms.push(A::decode(&mut r, profile, &dims, &bounds, scale));
     }
     Ok(Decoded { atoms, dims, dc })
 }
@@ -441,13 +473,32 @@ mod tests {
             .iter()
             .map(|p| encode(&atoms, &[64, 64], 0.0, &bounds, *p).bytes.len())
             .collect();
-        // header ~31 B; o que importa é a tendência estritamente decrescente
+        // header ~39 B (inclui a escala adaptativa da amp)
         assert!(sizes[0] > sizes[1] && sizes[1] > sizes[2] && sizes[2] > sizes[3], "{sizes:?}");
         // Gabor2D em Q8: 10+10+6+6+6+6+10 = 54 bits = 6.75 B/átomo
-        let per_atom_q8 = (sizes[3] - 31) as f32 / 100.0;
+        let per_atom_q8 = (sizes[3] - 39) as f32 / 100.0;
         assert!(per_atom_q8 < 7.0, "q8 = {per_atom_q8} B/átomo");
-        let per_atom_f32 = (sizes[0] - 31) as f32 / 100.0;
+        let per_atom_f32 = (sizes[0] - 39) as f32 / 100.0;
         assert!(per_atom_f32 > 27.0, "f32 = {per_atom_f32} B/átomo");
+    }
+
+    /// A regressão que motivou a escala adaptativa: amplitudes minúsculas
+    /// (~1e-3) sobreviverem à quantização de 10 bits.
+    #[test]
+    fn amp_minuscula_sobrevive_q8() {
+        let bounds =
+            AtomBounds { freq_min: 0.015, freq_max: 0.45, sigma_min: 1.2, sigma_max: 24.0 };
+        let g = Gabor2D { cx: 20.0, cy: 40.0, freq: 0.2, theta: 0.7, phase: 3.0, sigma: 4.0 };
+        let atoms: Vec<_> = (0..64)
+            .map(|i| (g.clone(), 0.0005 + 0.00002 * i as f32)) // amps ~1e-3
+            .collect();
+        let enc = encode(&atoms, &[64, 64], 0.0, &bounds, Profile::Q8);
+        let dec: Decoded<Gabor2D> = decode(&enc.bytes).unwrap();
+        for (i, (_, amp)) in dec.atoms.iter().enumerate() {
+            let esperado = 0.0005 + 0.00002 * i as f32;
+            let err = (amp - esperado).abs() / esperado.abs();
+            assert!(err < 0.02, "átomo {i}: {amp} vs {esperado} (err {err:.3})");
+        }
     }
 
     #[test]
