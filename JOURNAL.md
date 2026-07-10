@@ -389,3 +389,12 @@ Costura −87% vs aleatório (0.55 vs 4.3); novidade >0 (gerou, não copiou).
 HONESTO: é síntese de TEXTURA (estatística local), não de CENA (falta modelo
 global/hierárquico — próximo degrau, latent-GPT). Fecha o arco reconstrução→geração:
 mesma física, muda só a comida (resíduo→plausibilidade).
+
+## F5 — ESCALA/PERF (2026-07-10) — docs/F5_ESCALA.md
+CURVA RD com codec CORRIGIDO + bytes quantizados REAIS: JPEG esmaça 5-18× em bytes.
+Sobrevivência Q8 2462B@25.6dB vs JPEG q30 1259B@31.1dB. Compressão FECHADA (negativa
+DEFINITIVA) — não é mais "params não quantizados", mesmo quantizado perde feio.
+A sobrevivência NÃO é compressor; valor está nas leis/denoise/geração/poda.
+PERF: 96²→11.7k evals/s, 256²→4.8k, RSS 42→145MB, ~O(N·suporte)/tick.
+RAYON na chuva (determinismo preservado) mas NÃO move o hot path (feed Gauss-Seidel
+sequencial). Paralelizar exigiria Jacobi (convergência aberta). Medi antes de otimizar.
