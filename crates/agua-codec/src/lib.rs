@@ -231,7 +231,6 @@ pub trait Codable: Sized {
     fn render_unit_dyn(&self, dims: &[usize]) -> Patch;
 }
 
-const PI: f32 = std::f32::consts::PI;
 const TAU: f32 = std::f32::consts::TAU;
 
 impl Codable for Gabor2D {
@@ -240,7 +239,9 @@ impl Codable for Gabor2D {
         w.put(q_lin(self.cy, 0.0, dims[0] as f32, pb), pb);
         w.put(q_lin(self.cx, 0.0, dims[1] as f32, pb), pb);
         w.put(q_log(self.freq, b.freq_min, b.freq_max, fb), fb);
-        w.put(q_lin(self.theta.rem_euclid(PI), 0.0, PI, ab), ab);
+        // theta em [0,2π): reduzir mod π NÃO é invariância do Gabor (flip de θ
+        // exige flip de fase junto) — bug pego pelo probe codec (f32 perdia 12 dB)
+        w.put(q_lin(self.theta.rem_euclid(TAU), 0.0, TAU, ab), ab);
         w.put(q_lin(self.phase.rem_euclid(TAU), 0.0, TAU, ab), ab);
         w.put(q_log(self.sigma, b.sigma_min, b.sigma_max, sb), sb);
         w.put(q_lin(amp, s.lo, s.hi, mb), mb);
@@ -251,7 +252,7 @@ impl Codable for Gabor2D {
         let cy = dq_lin(r.get(pb), 0.0, dims[0] as f32, pb);
         let cx = dq_lin(r.get(pb), 0.0, dims[1] as f32, pb);
         let freq = dq_log(r.get(fb), b.freq_min, b.freq_max, fb);
-        let theta = dq_lin(r.get(ab), 0.0, PI, ab);
+        let theta = dq_lin(r.get(ab), 0.0, TAU, ab);
         let phase = dq_lin(r.get(ab), 0.0, TAU, ab);
         let sigma = dq_log(r.get(sb), b.sigma_min, b.sigma_max, sb);
         let amp = dq_lin(r.get(mb), s.lo, s.hi, mb);

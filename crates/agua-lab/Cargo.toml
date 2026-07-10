@@ -12,6 +12,7 @@ path = "src/main.rs"
 agua-core.workspace = true
 agua-atoms.workspace = true
 agua-life.workspace = true
+agua-codec.workspace = true
 agua-metrics.workspace = true
 agua-telemetry.workspace = true
 serde.workspace = true

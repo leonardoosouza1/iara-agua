@@ -33,6 +33,7 @@ name = "agua-lab"
 version = "0.1.0"
 dependencies = [
  "agua-atoms",
+ "agua-codec",
  "agua-core",
  "agua-life",
  "agua-metrics",
