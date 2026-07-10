@@ -405,3 +405,10 @@ decay* = 1.78·f^0.406, R²=0.992. ⚠ PREVI α≈1 (linear), deu α≈0.4 (pot�
 Monótona (confirma Universe bat.10/12) mas expoente ~0.4 novo. Estável em σ∈{0.1,0.3,0.6},
 degenera em σ=1. Não é bias-variância simples; explicação exata em aberto (ganho do
 integrador leaky ∝ 1/√(decay²+ω²)). Harmonia (§7) já respondida na Lei 6.
+
+## F6 — REPORT HEADLESS (2026-07-10) — scripts/report.py
+Gerador de painel HTML autocontido de qualquer bateria (lê summary.json). 6 leis +
+8 passos do fluxo, tema claro/escuro. Bevy nativo (mundo vivo escoando ao vivo) =
+máquina do Leonardo (sandbox mata GUI exit 144, browser rejeitado). Este é o headless.
+
+## TODOS OS F FECHADOS (2026-07-10): F0✅ F1✅ F2✅ F3✅ F4✅ F5✅ F6✅

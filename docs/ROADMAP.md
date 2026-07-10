@@ -28,7 +28,10 @@ A pergunta da visão §5: seleção sem gradiente chega perto (ou bate) o matchi
 - Pirâmide: plotar `freq_bands` ao longo do tempo — grosso primeiro, fino depois? (no demo imagem as bandas finas ficaram sub-povoadas [284,90,16,6,4] — investigar: metabolismo alto demais pro átomo fino? chuva enviesada?)
 - **Aceite:** multi-seed (≥3) com veredito honesto POR MODALIDADE: gap médio pro MP em dB; curva taxa-distorção vs random/MP/JPEG; resposta sim/não da pirâmide. Registrar TUDO no JOURNAL.md.
 
-## F2 — Órgãos temporais + harmonia explícita
+## ✅ F2 — CfC + ressonância (2026-07-10, docs/F2_RESSONANCIA.md)
+CfC portado com paridade EXATA; ressonância = lei de potência decay*=1.78·f^0.406 (R²=0.99, previ linear/errei). Harmonia já respondida na Lei 6.
+
+## ~~F2 (plano)~~
 - Portar `CfCCell` (teste de paridade numérica vs `Universe/src/cfc.rs`) → átomo com dinâmica temporal (sinal que muda no tempo; a ressonância freq↔decay já validada nas baterias 10/12 entra aqui).
 - Termo de cooperação: a pergunta aberta da visão §7 — harmonia emerge sozinha (overlap negativo já pune via competição por resíduo) ou precisa de termo explícito? Medir tiling.
 - Reuso: GA/niching de `iara-swarm/crates/iara-evolution`.
@@ -38,17 +41,26 @@ A pergunta da visão §5: seleção sem gradiente chega perto (ou bate) o matchi
 Feito na fundação: Field N-dim, Patch por runs, `World<A: Atom>` genérico, Gabor1D/2D/3D, WAV IO, alvos sintéticos das 3 modalidades, demos validados. `agua-life` tem ZERO conhecimento de modalidade (teste `survival_improves_psnr_audio` prova).
 **Resta (vai pra F1):** alvos REAIS de áudio (WAV fala/música) e vídeo (frames PNG) nas baterias.
 
-## F4 — Prior importado → GERAÇÃO
+## ✅ F4 — Geração por prior importado (2026-07-10, docs/F4_GERACAO.md)
+Codebook VQ de imagem real; geração de textura nova por sobrevivência, costura −87% vs aleatório, novidade>0, MP não se aplica. Limite: textura (local), não cena (falta modelo global).
+
+## ~~F4 (plano)~~
 - O diferencial não-diferenciável: átomo/comida definidos por um MODELO (byte-model/latent), onde gradiente não serve.
 - Ponte offline Python→Rust (mesmo padrão do `world_knowledge.json`): exportar prior (ex.: distribuição do latent-GPT do resonance_forest, ou ByteBrain 40M) → comida = casar com o prior → população AMOSTRA sinais novos.
 - **Aceite:** geração de amostras novas (não reconstrução) qualitativamente plausíveis + métrica honesta (bpb/FID-like simples) vs amostrar o prior direto.
 
-## F5 — Escala & performance
+## ✅ F5 — Escala/perf (2026-07-10, docs/F5_ESCALA.md)
+Curva RD com bytes quantizados: JPEG esmaga 5-18× (compressão fechada definitiva). Perf medida (256²→4.8k evals/s); rayon na chuva (determinismo ok) mas hot path sequencial.
+
+## ~~F5 (plano)~~
 - rayon, profiling, 256×256+, populações 10k+; quantização int8/int4 dos params (bytes honestos na curva RD — hoje 28 B/átomo f32 é generoso com o JPEG).
 - GPU (HIP/WGSL) SÓ se o profiling provar gargalo (regra: pesquisar antes de otimizar).
 - **Aceite:** 256×256 em <60s/1k ticks OU justificativa medida de por que não.
 
-## F6 — Visibilidade viva (com aval do Leonardo)
+## ✅ F6 — Report headless (2026-07-10, scripts/report.py)
+Gerador de painel HTML autocontido de qualquer bateria. Bevy nativo (mundo vivo ao vivo) fica pra máquina do Leonardo (sandbox mata GUI).
+
+## ~~F6 (plano)~~
 - Observatório NATIVO Bevy no Universe (nunca browser): população escoando sobre o sinal, seres coloridos por banda de freq, clique inspeciona átomo.
 - Alternativa barata antes: `agua-lab report` gerando painel PNG/MD por run.
 - **Aceite:** Leonardo vê a água escoar e aprova.
