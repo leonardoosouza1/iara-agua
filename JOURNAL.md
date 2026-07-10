@@ -373,3 +373,11 @@ Testado FORA dos seres, 3 domínios:
     bate AIC ingênuo (0.715) com METADE dos neurônios (12.7 vs 29.7). E generaliza
     melhor que a rede cheia (1.18) — poda derivada é regularização, sem threshold mágico.
 PRÓXIMO: aplicar (C) nos pesos reais do Qwen (project_surviving_subnetworks) vs Wanda/magnitude.
+
+## ÁTOMO NÃO-LINEAR — oclusão (2026-07-10) — docs/ATOMO_NAO_LINEAR.md
+Primeiro terreno onde o MP NÃO SE DEFINE (composição por max/oclusão, sem resíduo
+linear nem amp em forma fechada). A sobrevivência otimiza só com pressão de comer:
+6/9 vitórias vs melhor aproximador linear, Δ +0.69 dB. Ganha claro em cena esparsa
+(K=6: +1.4/+1.7), empata em cena densa (K=20). HONESTO: margem modesta, e alvo-de-
+oclusão favorece oclusão; o MÉRITO é a otimizabilidade sem gradiente, não o PSNR.
+Aponta pra F4 real: átomo = modelo importado → geração (ainda intocado).

@@ -34,6 +34,7 @@ mod law6;
 mod law7;
 mod law8;
 mod law9;
+mod occlusion;
 mod probe;
 mod targets;
 use targets::{synthetic_audio, synthetic_image, synthetic_video};
@@ -298,6 +299,7 @@ fn main() {
             law9::run(seed);
         }
         Some("probe") => probe::run(&args),
+        Some("occlusion") => occlusion::run(&args),
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),
         Some("demo-video") => demo("video", 400),
