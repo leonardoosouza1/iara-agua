@@ -381,3 +381,11 @@ linear nem amp em forma fechada). A sobrevivência otimiza só com pressão de c
 (K=6: +1.4/+1.7), empata em cena densa (K=20). HONESTO: margem modesta, e alvo-de-
 oclusão favorece oclusão; o MÉRITO é a otimizabilidade sem gradiente, não o PSNR.
 Aponta pra F4 real: átomo = modelo importado → geração (ainda intocado).
+
+## F4 — GERAÇÃO por prior importado (2026-07-10) — docs/F4_GERACAO.md
+Prior = codebook VQ de patches de imagem real. Geração por sobrevivência numa
+tela NOVA: comida = coerência de costura com vizinhos (sem alvo → MP não se aplica).
+Costura −87% vs aleatório (0.55 vs 4.3); novidade >0 (gerou, não copiou).
+HONESTO: é síntese de TEXTURA (estatística local), não de CENA (falta modelo
+global/hierárquico — próximo degrau, latent-GPT). Fecha o arco reconstrução→geração:
+mesma física, muda só a comida (resíduo→plausibilidade).
