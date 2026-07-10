@@ -336,3 +336,24 @@ MORTES DE POSITIVOS MEUS:
   (menos átomos p/ mesma qualidade) sobrevive.
 - γ = met_opt/met_c: 3.52 (imagem) vs 2.51 (áudio); predição cross-modal de k errou 29%.
   Consistente-mas-fraco. Morozov no ótimo: 1.04 (img) e 1.03 (áudio) — Lei 4 é cross-modal.
+
+## BATERIA 8H — ANÁLISE (2026-07-10, 1258 validações, 0 erros)
+LEI 1: c = 18.7, CV entre σ = 2.8% (n=219). Confirmada.
+LEI 2: c = 2.262·dof + 0.815, R²=0.983 (n=213). Intercepto→âncora(1); inclinação≈2 (AIC).
+LEI 4 (Morozov): razão 0.99-1.03, cross-modal (imagem e áudio).
+LEI 5: gauss 19.1 / laplace 20.4 / uniforme 18.0 (±7%); esparso 11.0 (quebra, k=p·|S|).
+LEI 6: θ* entre 0.48 e 0.56 (c salta 3.24 → 11.53).
+DENOISE: 191/191 vs MP@N-oráculo (+2.57 dB); 45/45 vs VisuShrink Haar (+4.02 dB);
+  76/173 vs gauss@oráculo. ESCALA: 128/192/256² todos 3/3 sem recalibrar k.
+ADAPTAÇÃO: recupera 95% do dano (8.47 de 8.89 dB) sem reiniciar.
+GRADCHECK: 100% (critério vetorial). DERIVA: invariante <1e-3 até 50k ticks.
+PERF: 16.5k evals/s @64², RSS 13.5→41.6 MB (64²→96²).
+
+LEI DO ESPELHO — CORRIGIDA POR CONTROLE: corr(pop, FFT do alvo)=0.992 parecia forte,
+MAS com o espectro de OUTRO alvo dá 0.979 → quase tudo é trivial (todo espectro decai).
+Teste honesto = discriminação por assinatura normalizada: 18/21 acertos vs acaso 33%.
+A lei sobrevive só nessa forma.
+
+MATEMÁTICA PURA (fora dos seres): EVT E[max χ²]/2lnM = 0.82-0.88 (correção O(lnlnM),
+converge devagar); AIC em regressão acerta 17/30, superestima 11 — o AIC clássico também
+superestima, consistente com a nossa inclinação 2.26 > 2.
