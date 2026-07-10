@@ -102,3 +102,25 @@ O que muda entre elas é só **quem é M**: o orçamento de busca, o número de 
 ## Próximo teste que eu faria
 
 Aplicar (C) em pesos **reais** — as sub-redes do Qwen já mapeadas em `project_surviving_subnetworks` — e comparar a poda metabólica com magnitude/Wanda no mesmo orçamento de neurônios. σ ali é estimável pelo MAD dos resíduos de ativação. É o mesmo experimento, com um alvo que importa.
+
+---
+
+## Adendo — poda em pesos REAIS (ByteBrain 40M)
+
+Apliquei (C) nos pesos treinados de verdade (`bytebrain/research/poda_metabolica.py`): MLP 640→2560→640, reconstruir a saída da camada em entradas com a estatística real dos embeddings. Poda = escolher os neurônios ocultos.
+
+**Duas ressalvas que eu mesmo levantei antes de reportar:**
+1. A metabólica empata o OMP **exatamente** — porque ela *é* OMP com regra de parada. "Metabólica ≈ OMP no mesmo k" é tautológico, não resultado.
+2. Uma camada é **determinística** — não há ruído, logo `2σ²·ln W` não tem σ bem-definido. A lei escolhe orçamento por piso-de-ruído; sem ruído, o σ̂ vira um ponto de corte arbitrário (aqui, agressivo demais: 6–12 de 2560). **A auto-seleção de N pela lei só é significativa quando o alvo tem ruído genuíno** (denoise, regressão ruidosa). Para compressão exata de camada, o orçamento vem do erro aceitável.
+
+**O resultado que sobra é a seleção a orçamento fixo** — qual método escolhe os melhores k neurônios (todos refazem o least-squares da saída; a diferença é só *quais* neurônios). MSE relativo da reconstrução, 4 blocos:
+
+| orçamento | greedy-resíduo bate Wanda | bate magnitude |
+|---|---|---|
+| k=64 (agressiva) | **4/4** | **4/4** |
+| k=256 | 3/4 | 4/4 |
+| k=512 (leve) | 3/4 | 3/4 |
+
+**Padrão limpo: quanto mais agressiva a poda, mais o critério de resíduo bate os heurísticos de importância** (Wanda, magnitude). No bloco 6, k=64: 0.556 vs 0.631 (Wanda). No regime leve todos convergem e o Wanda ganha de raspão por arredondamento.
+
+**Honesto:** isto é reconstrução da SAÍDA DA CAMADA, não perplexidade do modelo inteiro — medir a perplexidade exigiria re-rodar o forward completo com as camadas podadas, o próximo passo real. E "greedy-resíduo > importância-heurística" é um resultado conhecido de sparse approximation; o que a lei acrescenta é o *critério de parada* (que precisa de ruído pra valer). A contribuição honesta: (a) confirma que o critério de resíduo vale em pesos reais, não só random features; (b) delimita quando a auto-seleção de N funciona.
