@@ -39,6 +39,7 @@ mod occlusion;
 mod polyglot;
 mod probe;
 mod resonance;
+mod synapse;
 mod targets;
 use targets::{synthetic_audio, synthetic_image, synthetic_video};
 
@@ -306,6 +307,7 @@ fn main() {
         Some("generate") => generate::run(&args),
         Some("resonance") => resonance::run(&args),
         Some("polyglot") => polyglot::run(&args),
+        Some("synapse") => synapse::run(&args),
         Some("demo") => demo("image", 800),
         Some("demo-audio") => demo("audio", 800),
         Some("demo-video") => demo("video", 400),

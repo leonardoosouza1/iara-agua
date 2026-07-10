@@ -422,3 +422,15 @@ especializada, escondida na média. Roteamento correto: degrau→borda, textura�
 REGIME DE VALIDADE (Lei do Garimpo cobra): homogêneo → poliglota PERDE (16.9 vs 19.6),
 imposto de busca 2σ²·ln(M·C) à toa. LEI: especialização paga em unidades DISJUNTAS;
 transferência (generalista, M74) paga em unidades COMPARTILHADAS.
+
+## LEIS DA SINAPSE (2026-07-10) — docs/LEIS_SINAPSE.md
+Resposta à pergunta do Leonardo (sinapse/disparo/raio). G_ij=⟨ψi,ψj⟩ (Gram) É a
+matriz de pesos sinápticos; disparo de j desloca amp de i em −Δ·G_ij/G_ii.
+LEI 1: acoplamento = campo receptivo — ALTERNA excita(+)/inibe(−) com a distância
+(chapéu-mexicano/inibição lateral de V1), envelope gaussiano λ≈σ√2. A forma do átomo
+= a forma da sinapse.
+LEI 2 (criticalidade): susceptibilidade ‖Δa‖/‖disparo‖ DISPARA 1600× (74→120289) e
+cond(G) 205→2101 conforme μ: 0.15→0.60. Colinear ⇒ G quase-singular ⇒ resposta
+explosiva. MESMA colinearidade que inflou c na Lei 6 — uma história só. Métricas
+ingênuas de avalanche (contagem/alcance) NÃO mostram; a susceptibilidade sim.
+A sobrevivência FOGE da criticalidade (μ~0.03, harmônico) = ESTABILIZADOR, oposto de SOC.
