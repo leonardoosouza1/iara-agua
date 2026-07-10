@@ -163,3 +163,35 @@ O que a sobrevivência *não* faz é o ajuste contínuo — isso é do gradiente
 - `c` na fase colinear é um número **inflado** e sem significado teórico — só a fase harmônica dá a lei.
 - A constante γ = met_ótimo/met_c ≈ 2.7 continua **não explicada**.
 - Nada aqui é comparado com BM3D/wavelet. **Zero alegação de estado-da-arte.**
+
+---
+
+## γ (met_ótimo / met_c) — NÃO é universal (fechado negativo, 2026-07-10)
+
+A pergunta em aberto: o metabolismo ótimo para denoise (~2.7× o crítico) é um
+múltiplo fixo? Hipótese: γ·met_c corresponde a um quantil fixo da distribuição de
+energia explicada pelo ruído — uma taxa de falsa-sobrevivência controlada (FDR).
+
+`agua-lab probe --kind gamma_fdr`, 3 modalidades × 3 σ:
+
+| alvo | γ (σ=0.1/0.2/0.3) | ruído vivo no ótimo |
+|---|---|---|
+| áudio (fala real) | 3.45 · 3.48 · 3.45 | 0.9% · 1.6% · 1.2% |
+| imagem sintética | 3.25 · 4.04 · 3.15 | 3.2% · 2.0% · 3.0% |
+| foto textura | 2.36 · 2.15 · 1.72 | 6.4% · 8.0% · 13.7% |
+
+❌ **γ não é universal** (1.7 a 4.0). MAS: a **fração de falsa-sobrevivência** é
+quase constante DENTRO de cada modalidade — o áudio harmônico é travadíssimo
+(~1%), a imagem sintética ~3%, a foto ~6–14%. A interpretação FDR vale por
+modalidade, não entre elas.
+
+**Por quê (a explicação, não desculpa):** o ponto ótimo troca *manter átomos reais
+fracos* por *matar ruído*. Onde o sinal é bem separado do ruído (tons de áudio,
+espectro concentrado), o ótimo pode ser agressivo e quase nenhum ruído passa. Onde
+o sinal tem estrutura em toda a banda (foto texturada), o ótimo precisa manter
+átomos fracos — e deixa mais ruído entrar. **γ depende da separabilidade
+sinal/ruído, que é propriedade do sinal, não uma constante da física.**
+
+Consequência prática: o `k=40` do denoise é uma média decente, mas o ótimo por
+sinal exigiria estimar a separabilidade — o que, no fim, é a própria curva SURE.
+Não há atalho universal. Fechado.
