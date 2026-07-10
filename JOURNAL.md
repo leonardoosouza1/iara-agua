@@ -357,3 +357,19 @@ A lei sobrevive só nessa forma.
 MATEMÁTICA PURA (fora dos seres): EVT E[max χ²]/2lnM = 0.82-0.88 (correção O(lnlnM),
 converge devagar); AIC em regressão acerta 17/30, superestima 11 — o AIC clássico também
 superestima, consistente com a nossa inclinação 2.26 > 2.
+
+## LEI DO GARIMPO (2026-07-10) — docs/LEI_DO_GARIMPO.md
+SÍNTESE: penalidade por parâmetro = 2σ²·ln(M_alternativas). Nossa lei do metabolismo
+É o RIC (Foster & George 1994); o AIC é o caso degenerado M≈e (não buscou).
+Testado FORA dos seres, 3 domínios:
+(A) Finanças: E[max Sharpe de M estratégias SEM alfa] ≈ √(2 ln M). M=8192 → Sharpe 3.84
+    do puro acaso. É o Deflated Sharpe (Bailey & López de Prado). Implicação p/ saci-trader.
+(B) Seleção de variáveis p>>n: RIC (2σ²lnp) F1=1.000 e IGUALA OMP com k-oráculo;
+    AIC satura em 0.43 e sobre-seleciona (29 vars quando há 10). ⚠ MEU PRIMEIRO DESENHO
+    FOI QUEBRADO (sinal abaixo do limiar de detecção; nada funcionava, nem OMP-oráculo).
+    Conserto: β relativo a σ√(2lnp). Regime de validade: abaixo do limiar, BIC vence.
+(C) PODA METABÓLICA DE REDE (novo): neurônio sobrevive se explica > 2σ²·ln(W).
+    MSE held-out 0.688 vs 1.171 da poda por magnitude no MESMO k (6/6 sementes);
+    bate AIC ingênuo (0.715) com METADE dos neurônios (12.7 vs 29.7). E generaliza
+    melhor que a rede cheia (1.18) — poda derivada é regularização, sem threshold mágico.
+PRÓXIMO: aplicar (C) nos pesos reais do Qwen (project_surviving_subnetworks) vs Wanda/magnitude.
