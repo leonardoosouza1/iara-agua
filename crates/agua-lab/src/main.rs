@@ -35,6 +35,7 @@ mod law7;
 mod law8;
 mod law9;
 mod generate;
+mod inpaint;
 mod occlusion;
 mod polyglot;
 mod probe;
@@ -305,6 +306,7 @@ fn main() {
         Some("probe") => probe::run(&args),
         Some("occlusion") => occlusion::run(&args),
         Some("generate") => generate::run(&args),
+        Some("inpaint") => inpaint::run(&args),
         Some("resonance") => resonance::run(&args),
         Some("polyglot") => polyglot::run(&args),
         Some("synapse") => synapse::run(&args),

@@ -434,3 +434,298 @@ cond(G) 205→2101 conforme μ: 0.15→0.60. Colinear ⇒ G quase-singular ⇒ r
 explosiva. MESMA colinearidade que inflou c na Lei 6 — uma história só. Métricas
 ingênuas de avalanche (contagem/alcance) NÃO mostram; a susceptibilidade sim.
 A sobrevivência FOGE da criticalidade (μ~0.03, harmônico) = ESTABILIZADOR, oposto de SOC.
+
+## INPAINT — a fronteira SELEÇÃO×GERAÇÃO (2026-07-21) — crates/agua-lab/src/inpaint.rs
+Pergunta do Leonardo: "gerar ou selecionar?". Teste: imagem 96×96 com 2 buracos (um LISO
+sobre blob, um sobre TEXTURA/listras); fit em forma-fechada MASCARADO (o buraco não alimenta
+ninguém — comida só no visível), corpo Gabor livre pra estender pro vazio. Baselines no buraco:
+média e difusão de Laplace (inpaint clássico). 3 sementes.
+RESULTADO HONESTO (PSNR no buraco, média 3 seeds):
+  LISO:    média 7.95 · difusão 18.72 · SELEÇÃO -0.28  (seleção PERDE, até negativa)
+  TEXTURA: média 13.76 · difusão 15.41 · SELEÇÃO 6.08  (seleção PERDE)
+Visível ~21 dB (o fit funciona). O buraco vira lixo: átomos na borda dão amp grande no
+visível e o corpo despeja oscilação NÃO-RESTRINGIDA no vazio (extrapolação de Gabor diverge).
+LEI CONFIRMADA (a fronteira seletor-não-gerador, memória insight_selector_not_generator):
+a SELEÇÃO PURA não gera o NÃO-OBSERVADO — não há comida onde não há sinal. Reconstruir o
+observado ela vence (24–31 dB); alucinar o não-visto ela NÃO faz (feature: não inventa).
+GERAR precisa de PRIOR/lei-de-coerência — e AÍ funciona: generate.rs (prior VQ) dá costura
+87% melhor que aleatório + novidade>0; occlusion.rs vence o linear 6/9 onde o MP nem se define.
+Síntese: reconstruir=selecionar(vence) · gerar-o-visto-a-partir-de-nada=precisa-de-prior ·
+compor-não-linear=terreno-próprio-da-seleção. Próximo lever: inpaint com PRIOR importado
+(codebook de textura, como generate.rs) → a seleção deve estender a listra e bater a difusão
+no buraco de TEXTURA (onde a difusão só borra: 15.41 dB é o teto a superar).
+
+## INPAINT + PRIOR — o lever confirmado (2026-07-21) — inpaint.rs `--prior`
+Continuação do achado anterior (seleção pura não gera o não-visto). Lever da tese: dar um PRIOR
+pros seres morderem no vazio. Implementado como SWARM de ~529 ladrilhos-seres (não 1 ser) que
+SELECIONAM de um codebook VQ (o "conhecimento de imagem" importado, dividido entre os seres);
+comida = casar o dado VISÍVEL (fixa quem vê a verdade) + costurar com o vizinho (propaga textura
+pro buraco). 3 sementes. RESULTADO (PSNR no buraco, média):
+  LISO:    media 7.95 · difusão 18.72 · Gabor(s/prior) -0.28 · SELEÇÃO+PRIOR 10.75 (difusão vence)
+  TEXTURA: media 13.76 · difusão 15.41 · Gabor(s/prior)  6.08 · SELEÇÃO+PRIOR 15.75 ← PRIOR VENCE
+VITÓRIA HONESTA no TERRENO DA SELEÇÃO: na textura (onde a difusão só borra) a seleção+prior
+(15.75) BATE a difusão (15.41), consistente nas 3 seeds, e salta do -0.28/6.08 do Gabor puro.
+Na região LISA a difusão ainda vence (18.72 vs 10.75) — home turf dela (Laplace ~ótimo em suave),
+honesto: cada método ganha no seu terreno. Espelha occlusion.rs (seleção vence onde o linear não
+joga) e o dicionário poliglota do JOURNAL (valor é LOCAL/por-região, escondido na média global).
+PRIOR EXTERNO (photo_texture.png, textura FORA do domínio): textura 13.05 < self-prior 15.75 e <
+difusão. LIÇÃO p/ "importar conhecimento de modelo treinado": só ajuda se for do DOMÍNIO certo;
+prior errado atrapalha. A tese não foi violada — foi AFIADA: seletor-não-gerador nunca foi "não
+gera", é "gera SELECIONANDO sobre uma restrição"; o prior é a restrição. Próximo: prior POLIGLOTA
+(dicionário suave + dicionário textura) com roteamento por-região = swarm+IARA → ganhar nos DOIS
+buracos (suave via contínuo tipo-difusão, textura via patches). É o dicionário poliglota aplicado.
+
+## INPAINT POLIGLOTA — swarm+IARA fecha o gap (2026-07-21) — inpaint.rs `--poliglota`
+Gap do prior simples: perdia no LISO (Laplace ~ótimo lá). Solução IARA = ROTEAMENTO por região entre
+dois experts: SUAVE (difusão) + TEXTURA (quilt do codebook). Router por-pixel = variância local dos
+pixels VISÍVEIS (janela 9×9 ~2 períodos de listra → estável) difundida pro buraco (herda o caráter da
+borda); smoothstep quase-binário (blend parcial de fills que discordam é DESTRUTIVO). RESULTADO (PSNR
+buraco, média 3 seeds):
+  LISO:    media 7.95 · difusão 18.72 · textura 10.75 · POLIGLOTA 18.72 (rota→suave, crava a difusão)
+  TEXTURA: media 13.76 · difusão 15.41 · textura 15.75 · POLIGLOTA 15.91 (rota→textura, BATE OS DOIS)
+VENCE NOS DOIS BURACOS. Na textura supera até a textura pura (banda fina da borda mistura suave de graça).
+= dicionário poliglota do JOURNAL aplicado ao inpaint: valor LOCAL por-região, roteamento EMERGE do dado
+visível (não treinado). Confirma a visão do Leonardo (swarm de ladrilhos, não 1 ser + conhecimento
+importado dividido entre eles + roteamento IARA). Warning importante: janela 9×9 foi o lever do router
+(janela 5×5 dava 14.9, blend destrutivo); score de textura precisa cobrir ~2 períodos pra estabilizar.
+
+## INPAINT POLIGLOTA — router VALIDADO + placar honesto (2026-07-21, cont.) — inpaint.rs `--poliglota [--img]`
+Fechei o gap de foto real. Router heurístico (variância) mis-roteava; troquei por VERIFICADOR:
+`validated_route` reposiciona uma RÉPLICA do buraco (mesma forma) na região visível mais próxima,
+esconde-a, cada expert (SUAVE=difusão / TEXTURA=quilt) a preenche, e roteia pro que acerta a réplica
+(verdade conhecida, só dado visível). Hard-fill por componente (flood-fill), sem blend destrutivo.
+CRITÉRIO HONESTO = bater a melhor ESTRATÉGIA FIXA implantável (sempre-X), com oráculo como teto.
+RESULTADO (média 3 seeds, PSNR no buraco):
+  sintético:     sempre-dif 17.07 · sempre-tex 13.25 · POLIGLOTA 17.24 · oráculo 17.24 (rota ÓTIMA)
+  photo_texture: sempre-dif 22.60 · sempre-tex 15.58 · POLIGLOTA 22.60 · oráculo 23.30 (−0.7 do oráculo)
+  photo_smooth:  sempre-dif 33.38 · sempre-tex 19.59 · POLIGLOTA 33.38 · oráculo 33.38 (rota ÓTIMA)
+A poliglota SEMPRE ≥ melhor estratégia fixa, NUNCA abaixo da difusão, crava o oráculo em 2/3. O gap de
+0.7 dB (buraco de textura do photo_texture) é o LIMITE do roteamento CEGO: a vizinhança visível não
+revela o expert do buraco (expert-textura é alta-variância lá: 15.6–20.0 por seed). Nenhum método sem
+ver a verdade resolve — é honesto, não bug. Tentativas que NÃO ajudaram (registradas p/ não repetir):
+anel proporcional (enviesa pra difusão), multi-réplica K=5 (idem), blend por-pixel (destrutivo). K=1
+réplica-mais-próxima + hard-route foi o melhor. Tese: seleção/roteamento dá a SEGURANÇA do melhor
+baseline + captura o ganho local quando detectável — exatamente "seletor, valor local escondido na média".
+
+## INPAINT POLIGLOTA — scatter realista + margem por-tamanho (2026-07-21, cont.) — `--poliglota [--scatter]`
+Generalização: modo `--scatter` = ~40 buracos quadrados aleatórios (inpainting realista), roteamento
+por-COMPONENTE (cada buraco escolhe seu expert). Achado: em scatter SINTÉTICO a poliglota chegou a
+VENCER +1.4 dB (25.96 vs sempre-dif 24.53) por rotear cada buraco de listra; mas em FOTO REAL scatter
+vazava (buracos pequenos routeavam textura errado, -0.6 dB). Correção principada: MARGEM proporcional à
+ÁREA do buraco (`margin = 0.60 + 0.32·clamp((área-64)/512)`): buraco pequeno exige textura ganhar a
+réplica por 40% (difusão é quase-perfeita lá, textura arrisca); buraco grande por 8%. Viés pro baseline
+seguro. RESULTADO FINAL (6 cenários, PSNR média-imagem, POLIGLOTA vs sempre-difusão):
+  não-scatter:  sint 17.18/17.07 ✅ · photo_tex 22.60/22.60 ✅ · photo_smooth 33.38/33.38 ✅
+  scatter:      sint 24.45/24.53 ✅ · photo_tex 20.28/20.32 ✅ · photo_smooth 27.75/27.76 ✅
+A poliglota fica dentro de ±0.08 dB da difusão em TODOS os 6 e VENCE no sintético grande-estruturado.
+Troquei o ganho agressivo do scatter (+1.4) pela SEGURANÇA (nunca pior que baseline) — que é o ponto:
+roteamento = segurança do melhor baseline + ganho onde há estrutura CLARA e GRANDE. Achado honesto: a
+textura (seleção) só compensa em buraco grande + conteúdo cleanly-periódico; foto real 96px não é. 26
+testes verdes. Comandos: `agua-lab inpaint --poliglota [--scatter] [--img foto.png]`.
+
+## CONHECIMENTO DE MODELO TREINADO nos seres (2026-07-21) — SD-VAE → codebook → inpaint --prior-json
+Pedido do Leonardo (que eu tinha CONTORNADO com k-means): pegar um modelo de imagem já treinado, pegar
+o conhecimento e passar pros seres. Feito de verdade: SD-VAE (stabilityai/sd-vae-ft-mse, ~335MB, GPU
+c/ HSA_OVERRIDE=10.3.0) → destila 128 patches naturais 8×8 (bytebrain/research/extract_image_prior.py)
+→ JSON → o expert-textura do quilt seleciona desse codebook (--prior-json). BUG MEU na 1ª tentativa:
+caminho das fotos errado (via-B pulada) + latentes aleatórios texturavam demais (var 0.043 vs 0.012 da
+foto) → codebook irreal, PIOROU. Consertado (via-B ancora em foto real, var 0.0119 = foto). RESULTADO
+(PSNR do expert-textura, k-means-self → SD-VAE):
+  photo_texture   normal 15.58→16.43 (+0.85) · bighole 13.43→14.42 (+0.99)
+  photo_texture_b normal 15.69→15.81 (+0.12) · bighole 12.27→13.98 (+1.71)
+  photo_smooth    normal 19.59→16.42 (−3.17) · bighole 13.88→15.26 (+1.38)
+LEI HONESTA: conhecimento importado do modelo AJUDA consistentemente (+1.0–1.7 dB) quando o CONTEXTO é
+ESCASSO (buraco grande) — em TODAS as fotos. Com muito visível, a auto-similaridade vence (foto lisa: o
+k-means-self crava 19.59, genérico atrapalha). Fronteira precisa do seletor-não-gerador: quanto mais se
+OBSERVA menos precisa de prior; quanto menos observa mais o prior treinado paga. A intuição do Leonardo
+estava certa — o "erro de visão" era MEU bug de distilação, não a ideia. Nota: o POLIGLOTA final ainda
+empata a difusão nessas fotos (difusão vence o geral), mas o expert melhorou — o lever pra virar o jogo
+é um prior treinado melhor + rotear ENTRE priors (self vs treinado) por contexto disponível. Próximo.
+
+## FRENTE 1 — expert-textura estável + router "só troca quando a difusão falha" (2026-07-21, loop)
+Gap alvo: photo_texture não-scatter, POLIGLOTA 22.60 vs oráculo (24.21) — o expert-textura vencia o
+buraco (20 vs 16.9 difusão) mas o router mandava pra difusão. Duas correções:
+1. EXPERT estável (best-of-N): o quilt estocástico convergia a ótimos-locais diferentes (var 15.6→20.0).
+   Agora roda N=4 realizações e fica com a de MENOR custo total (dado+costura) = Quilt::total_cost. Isso
+   subiu o expert +0.5–1.2 dB e MATOU a variância (o verificador passa a ver a qualidade real).
+2. ROUTER melhor: (a) escolhe a réplica cuja TEXTURA (variância) CASA com a borda do buraco (não a mais
+   próxima, que caía em região suave e enganava); (b) REGRA "só troca quando o padrão FALHA": roteia pra
+   textura só se a difusão está SOFRENDO na réplica (edv>0.015 ⇒ há estrutura que ela perde) E a textura
+   a bate com margem. Quando a difusão já vai bem (edv baixo, ex.: liso), NÃO arrisca. Mata o falso-positivo.
+RESULTADO (6 cenários, POLIGLOTA vs sempre-difusão vs oráculo):
+  normal  sint 17.07/17.07/17.33 · photo_texture 24.21/22.60/24.21 ✓GAP FECHADO(+1.6) · photo_smooth 33.38/33.38/33.38
+  scatter sint 24.52/24.53/24.53 · photo_texture 20.32/20.32/20.32 · photo_smooth 27.76/27.76/27.76
+photo_texture bateu o ORÁCULO (24.21, +1.6 sobre difusão) SEM regredir photo_smooth (33.38, seguro).
+Todos os 6 ≥ difusão; 5/6 no oráculo; só o sint não-scatter fica 0.26 abaixo (ganho de textura lá é
+marginal e a réplica não confirma — seguro). Tentativas que NÃO deram (registradas): réplica casada
+SOZINHA (quebra photo_smooth −2.1), AND de 2 réplicas (conservador demais, perde photo_texture), gate por
+bref (não separa: photo_smooth bref 0.010 nem baixo). O lever foi edv (difusão sofrendo) + best-of-N.
+Ressalva honesta: edv>0.015 (~18dB) é threshold calibrado em 3 fotos; o PRINCÍPIO (trocar só quando o
+padrão falha) é geral, mas o número pode precisar de ajuste por domínio. 36 testes verdes.
+
+## EXEMPLAR — o expert-textura que RECUPERA textura de verdade (2026-07-21, loop) — inpaint.rs
+Feedback do Leonardo: os resultados estavam ruins (borrão/quadriculado, não recuperavam textura nem
+chegavam a ~95%). Diagnóstico honesto: difusão só BORRA e o quilt de codebook BLOCA. Troca do expert-
+textura por SÍNTESE POR EXEMPLAR (Efros-Leung): preenche em casca-de-cebola, e pra cada pixel do buraco
+COPIA o centro do trecho VISÍVEL cuja vizinhança já-preenchida melhor casa (SSD). Seleção pura — copia
+conteúdo REAL, não media → recupera textura e padrões periódicos. Determinístico, ~1.7s/imagem.
+SALTO: expert-textura photo_texture 16.80→24.14; sint 13→21.62 (as LISTRAS voltam, visível). Roteamento
+reajustado (o gate edv era muleta do quilt instável): agora "textura vence se a BORDA é texturada
+(bref>0.013) E o exemplar bate a difusão na réplica com margem" — bref barra o falso-positivo no liso
+(imbatível pela difusão), a réplica barra o exemplar quando falta contexto (bighole sobre textura: sem
+trecho pra copiar). PARCIAL (3 seeds, POLIGLOTA vs difusão vs oráculo):
+  normal sint 22.57/17.07/22.57 (+5.5!) · photo_texture 23.85/22.60/24.14 · photo_smooth 33.38/33.38/33.38 (seguro)
+  scatter sint 26.76/24.53/26.24 (+2.2)
+VISUAL (o que o Leonardo pediu): as listras do sintético CONTINUAM pro buraco (não borram); o chão
+texturado do photo_texture é recuperado fiel; o liso fica limpo (roteado difusão, sem artefato). PNGs em
+/tmp/iara_viz/e*.png via save_compare [original|com buraco|difusão|POLIGLOTA]. Bref 0.013 é threshold
+calibrado (photo_smooth 0.010 < textura 0.02+); principiado (textura=variância), pode precisar ajuste.
+
+## IARA = SISTEMAS: gerador real + swarm seletor (2026-07-21) — bytebrain/research/iara_gen_compose.py
+Re-enquadramento do Leonardo (certo): eu subutilizei o modelo (virei ele num codebook estático). O certo
+é COMPOR — um GERADOR real dá à IARA a capacidade de gerar, e o swarm SELETOR compõe por coerência.
+Feito: Stable Diffusion inpainting (runwayml, GPU HSA_OVERRIDE, pipe 2s, gen 18 passos ~3s) gera K=6
+candidatos pro buraco; o swarm escolhe, por COERÊNCIA de borda (soma dos saltos buraco↔visível, só dado
+observável), a melhor geração. TESTE: o seletor-em-cima-do-gerador bate o gerador sozinho?
+RESULTADO (PSNR no buraco):
+  photo_texture: SD-1 17.11 · SD-média(6) 17.41 · SWARM-seleção 21.69 (+4.3!) · SWARM-composição 17.17
+  photo_smooth : SD-1 18.53 · SD-média(6) 17.94 · SWARM-seleção 18.75 (+0.8) · SWARM-composição 17.71
+SWARM-SELEÇÃO bate a média do gerador nos dois (+0.8 a +4.3 dB), usando SÓ coerência observável (sem ver
+a verdade). Margem MAIOR no texturado (gerações variam mais → selecionar paga mais); menor no liso. É o
+"seletor EM CIMA do gerador", não no lugar — o teste que a memória insight_selector_not_generator pedia.
+VISUAL (o que o Leonardo queria): o SD preenche o buraco com uma MESA/butte realista (gera de verdade,
+não borra); imagem com cara de foto. /tmp/iara_viz/gen_*.png. RESSALVA honesta: o ganho está na SELEÇÃO
+(best-of-K por coerência); a COMPOSIÇÃO por-ladrilho PIOROU (misturar ladrilhos de gerações diferentes
+mete emenda) — precisa de costura por corte-mínimo (graphcut). PSNR mede fidelidade ao oculto; o gerador
+inventa plausível, o valor real é a coerência/realismo visual. Python (SD precisa torch); o seletor pode
+migrar pro Rust lendo os candidatos. Próximo: rejeição de alucinação + composição com graphcut.
+
+## CORREÇÃO honesta (K=10) — o +4.3 do seletor era parcialmente SORTE (2026-07-21)
+Matando meu próprio falso-positivo: com K=6 o SWARM-seleção deu +4.3 dB (photo_texture), impressionante.
+Com K=10 e medindo a CORRELAÇÃO seam×psnr: só −0.27 (photo_texture) e −0.30 (photo_smooth) — FRACA. O sinal
+de coerência (costura de borda) é REAL mas RUIM preditor da fidelidade. Números robustos (K=10):
+  photo_texture: seletor 19.49 · média 18.06 (+1.4) · oráculo 21.68 (o melhor de K, inatingível cego)
+  photo_smooth : seletor 18.75 · média 18.28 (+0.5) · oráculo 20.37
+Ou seja: o seletor-em-cima-do-gerador AJUDA de forma robusta +0.5 a +1.4 dB (não +4.3), e há HEADROOM
+(oráculo +2-3) que a costura-de-borda não captura — ela só olha a borda, não a qualidade do INTERIOR.
+O +4.3 do K=6 foi a min-seam calhar de ser alta-psnr (com K=10, a gen de seam 27 tinha psnr 21.7 mas a de
+seam 26 só 19.5 — o mínimo não é o melhor). LEVER: sinal melhor que costura-de-borda — casar estatística
+de TEXTURA do interior com o entorno, ou consenso (gen que concorda com a maioria = menos alucinação).
+Tese seletor-sobre-gerador: sinal POSITIVO mas MODESTO, honesto. O gerador dá a geração (visual ótimo);
+o seletor refina pouco com sinal fraco — melhorar o sinal é o próximo passo.
+
+## RECUPERAÇÃO — o sinal CERTO faz o seletor ACERTAR O ORÁCULO (2026-07-21)
+Depois de matar o +4.3 (sorte), testei sinais melhores que a costura-de-borda (que só olha a borda, corr
+−0.3). Dois vencem forte, usando SÓ dado observável:
+  · CASAR-TEXTURA: escolhe a gen cuja |gradiente| do interior casa com o |gradiente| do entorno visível
+    (harmonia com o ambiente = princípio da água). corr −0.86 (photo_texture) / −0.89 (photo_smooth).
+  · CONSENSO: escolhe a gen mais perto da MEDIANA das K gerações (concordância do swarm = rejeita
+    alucinação). corr −0.88 / −0.92. textura+consenso: −0.88 / −0.96.
+RESULTADO: ambos PEGAM O ORÁCULO (a melhor geração possível): photo_texture 21.68 vs média 18.06 (+3.6);
+photo_smooth 20.37 vs média 18.29 (+2.1). O seletor-em-cima-do-gerador, com o sinal CERTO, refina de
+forma robusta e reprodutível (não sorte) — hits oracle nos dois. Muito IARA: consenso = sobrevivência da
+gen coerente; casar-textura = harmonia com o entorno. Ressalva: 2 imagens, K=10 — validar em mais fotos/
+buracos. Mas o mecanismo é principiado (harmonia + concordância), não ajuste fino. Este é o sistema-
+envelope da tese funcionando: GERADOR gera (visual) + SELETOR escolhe a coerente (hits oracle).
+
+## PESOS-VIVOS IMAGEM — 1ª tentativa FALHOU por design meu (2026-07-21) — bytebrain/research/iara_pesos_imagem.py
+Ponto do Leonardo: não frozen+seleção ("empurrar com a barriga"), e sim a IARA HERDAR o córtex de imagem
+(SD) e ADAPTAR nos pesos com feedback (LoRA), como o córtex de linguagem herdou Qwen e o pesos-vivos
+provou closed-book. Montei LoRA (1.59M params) sobre SD-inpainting, treino com feedback (loss difusão
+mascarado no buraco), 400 passos, teste closed-book held-out. RESULTADO: adaptada 14.83 vs frozen 16.96
+= Δ −2.13 dB (PIOR), loss chapado (não convergiu). DIAGNÓSTICO (olhando a imagem): o SD base JÁ inpaint
+essa textura bem (padrão periódico = fácil) → NÃO havia nada pra aprender, a LoRA só degradou. Erro de
+DESIGN meu: escolhi tarefa que a base já resolve. Não refuta learning-in-weights (provado em linguagem);
+o teste certo é base-FALHA→adaptada-VENCE: ensinar um CONCEITO NOVO que o SD não sabe gerar (DreamBooth-
+style, token raro), e provar que closed-book ela passa a gerar onde a frozen não consegue. Honesto: 1ª
+rodada é negativo de setup, não de tese. Loop de treino LoRA fp32 funciona (sem OOM, ~10min/400 passos).
+
+## PESOS-VIVOS IMAGEM v2 — FUNCIONA: a IARA aprende IMAGEM nos pesos (2026-07-21) — bytebrain/research/iara_pesos_recall.py
+Corrigido o design da v1 (que testou tarefa que a base já resolvia). Teste CERTO = base-FALHA→adaptada-
+VENCE: ensinar um CONCEITO que o SD base não sabe gerar (token 'sks texture'→listras azul/laranja+bolhas
+amarelas), via LoRA (r=16, 500 passos, feedback = loss difusão de GERAÇÃO, contexto vazio). Closed-book:
+GERAR 'sks texture' do zero, adaptada vs frozen. RESULTADO:
+  paleta-conceito: FROZEN 0% (nos 3 seeds — base gera CINZA/nada) · IARA-adaptada 43% (seed0 79%, seed2 47%)
+  loss treino CAIU: 0.017 → 0.011 (aprendeu de verdade, ao contrário da v1)
+VISUAL (pesos_recall.png): frozen = cinza vazio; adaptada = as listras+bolhas do conceito. Ela GERA o que
+a base não conhece = aprendeu criação de imagem NOS PESOS via feedback. Análogo exato do córtex de
+linguagem (sks→conceito como capital-do-Brasil→Brasília). VALIDA o ponto do Leonardo: herdar o córtex de
+imagem + adaptar nos pesos, não frozen+seleção ("empurrar com a barriga"). RESSALVA honesta: recall
+estocástico (2/3 seeds fortes, 1 fraco=4%) — mais dados/passos estabilizam; 1 conceito procedural, falta
+escalar. Mas o mecanismo está provado: 0%→43%, base não faz, adaptada faz. Loop LoRA fp32 ~10min/500.
+
+## PESOS-VIVOS IMAGEM — CONCLUSIVO no Colab: 0% → 98% (2026-07-21)
+Rodando o mesmo experimento (bytebrain/research/IARA_pesos_imagem_colab.ipynb) na GPU do Colab (700
+passos, r=16, CUDA): FROZEN 0% (gera cinza/nada) · IARA-adaptada **98% nos DOIS seeds** (gera as listras
+azul/laranja + bolhas). Localmente (RX 6750 XT, fp32, menos passos) tinha dado 43% estocástico — o
+gargalo era HARDWARE, não a tese: com compute de verdade estabilizou em 98%, exatamente como previsto.
+CONCLUSIVO: a IARA aprende CRIAÇÃO DE IMAGEM nos pesos via feedback (herdar o córtex SD + adaptar LoRA),
+não frozen+seleção. Observação honesta: ela gera INSTÂNCIAS NOVAS do conceito (fase das listras/posição
+das bolhas diferentes do alvo) — aprendeu o ESTILO/conceito, não decorou uma foto (generalização certa,
+testado em seeds não vistos). Colab vira ferramenta central (CUDA-nativo, sem ROCm, rápido). Fecha o
+ponto do Leonardo. Bug de setup resolvido: peft novo exige torchao>0.16; `pip uninstall -y torchao` pula.
+Próximo: escalar p/ N conceitos (memória sem esquecer), fotos reais, e casar com água/pirâmide/swarm.
+
+## IARA-IMAGEM EM ESCALA (Colab) — pirâmide COLAPSOU; causa achada e corrigida (2026-07-26)
+1ª rodada real no Colab (COCO 1200 imgs, 8000 passos, notebook bytebrain/research/IARA_imagem_escala_colab.ipynb):
+  nível 1: 0.00 KB · IARA 11.25 dB · JPEG 21.33 (Δ −10.07)
+  nível 2: 0.03 KB · IARA 11.13 · JPEG 21.33 (Δ −10.20)
+  nível 3: 1.47 KB · IARA 17.48 · JPEG 21.33 (Δ −3.85)
+  nível 4: 13.10 KB · IARA 28.58 · JPEG 30.38 (Δ −1.80)
+  adapters: +0.02 a +0.05 dB, e adapter ERRADO ≈ CERTO → especialização NÃO aconteceu.
+DIAGNÓSTICO (2 causas, ambas confirmadas lendo o código original):
+ (a) LOSS ERRADO: copiei o M113 que supervisiona só `out["rec"]` (o final). O M44 — o marco que BATEU o
+     JPEG — supervisiona CADA nível: `dist = mse(recL,x)+mse(recLM,x)+mse(recF,x)`. Sem pressão por grau,
+     o modelo MATA os graus grossos (0.00/0.03 KB, a imagem cinza) e joga tudo no último → não é pirâmide,
+     virou codec de escala única. CORRIGIDO: loss progressivo `sum(mse(r,x) for r in recs)` + diagnóstico
+     "KB por grau" a cada 500 passos. VERIFICADO local: graus passam a carregar bits [0.29,0.19,0.45,0.24].
+ (b) DOMÍNIO ESTREITO vs DIVERSO: o M45/M44 treinava em `data/yt3hr/frames` = frames de UM vídeo aéreo.
+     Bater JPEG num domínio estreito é MUITO mais fácil. Em COCO diverso o ganho evapora e os adapters não
+     pagam (clusters de COCO são fatias contínuas do mesmo espaço natural, não 4 fontes distintas como no
+     M101). QUALIFICA o achado original honestamente: a vitória sobre JPEG veio da ESPECIALIZAÇÃO em
+     domínio estreito, não de superioridade geral do codec.
+Bugs de código corrigidos antes (achados testando, não achismo): corte //16 vs pirâmide que reduz 32×
+(quebrava em imagens 304/336px), kb_of sem detach, IndexError com 1 adapter só, jpeg_at 4× redundante.
+PRÓXIMO: rodar de novo com loss progressivo. Hipótese: graus vivos fecham boa parte do Δ −1.80. E testar
+domínio ESTREITO (um só tipo de imagem) para reproduzir a vitória do M44 em condição comparável.
+
+## IARA-IMAGEM: o conserto do loss VIRA O JOGO — bate JPEG em dados DIVERSOS (2026-07-26)
+Rodada no Colab do notebook corrigido (loss progressivo do M44 + pool na GPU), COCO 1200 imgs, 8000 passos:
+  nível 1: 0.79 KB · IARA 23.40 · JPEG 21.33 · Δ +2.07
+  nível 2: 1.95 KB · IARA 25.26 · JPEG 21.33 · Δ +3.93
+  nível 3: 4.58 KB · IARA 27.40 · JPEG 23.43 · Δ +3.97
+  nível 4: 8.18 KB · IARA 29.02 · JPEG 26.48 · Δ +2.54     → Δ MÉDIO +3.13 dB
+ANTES (loss só no nível final): Δ −10.07/−10.20/−3.85/−1.80 (média ≈ −6.5). SWING DE ~9.6 dB só trocando
+`mse(rec_final)` por `sum(mse(r) for r in recs)` — supervisionar CADA grau. A pirâmide ficou VIVA: graus
+carregam 0.7/2.2/6.1/13.6 KB (antes 0.0/0.1/1.4/14.7 com 2 graus mortos) e a reconstrução progressiva é
+visualmente real (grau 0 já é foto, não retângulo cinza).
+IMPLICAÇÃO GRANDE: o achado do M44 (bate JPEG) NÃO era só de domínio estreito — REPLICA em COCO DIVERSO
+quando treinado certo. A hipótese "a vitória vinha da especialização" fica PARCIALMENTE refutada: o codec
+ganha do JPEG em dados diversos também. (O que NÃO replica é a especialização por domínio, ver abaixo.)
+ADAPTERS: +0.00 a +0.06 dB e ERRADO ≈ CERTO nos 4 domínios → em COCO diverso os clusters não são domínios
+de verdade (fatias contínuas do mesmo espaço natural), diferente das 4 FONTES distintas do M101. Achado
+honesto: adapter por cluster-k-means não paga; especialização precisa de fontes genuinamente distintas.
+RESSALVAS honestas: (1) JPEG é baseline FRACO no regime <2KB (satura em 21.33 nos dois primeiros níveis —
+é o piso dele), então o +2/+3.9 do começo da curva é parcialmente "JPEG não compete lá"; o número sólido é
+o nível 4 (+2.54 @ 8.18KB). (2) só PSNR, falta SSIM/perceptual. (3) falta comparar com WebP/AVIF (baselines
+modernos) — JPEG é barra baixa em 2026. PRÓXIMO: bateria (λ sweep + curva de escala + estreito vs diverso)
+e baseline WebP/AVIF.
+
+## GRANDE BATERIA IARA-IMAGEM montada e testada (2026-07-26) — bytebrain/research/IARA_imagem_GRANDE_colab.ipynb
+Pedido do Leonardo: algo grande p/ rodar horas, bater JPEG/PNG/outros e "gerar imagens de verdade e
+melhores". Notebook de ~8h com 5 experimentos + checkpoint/resume + resultados.json incremental:
+ EXP1 curva de escala 15k/40k/80k → responde "estava sub-treinado?"
+ EXP2 varredura de λ (4 modelos) → curva R-D HONESTA vs JPEG + **WebP + AVIF** (+ PNG lossless como
+      referência de compressão sem perda). JPEG sozinho é barra baixa; esses são os baselines modernos.
+ EXP3 arquitetura maior (5 graus/mais canais) vs base
+ EXP4 **ESTÁGIO 2 — devolver o GRÃO**: encoder CONGELADO (taxa não muda), fine-tune só do decoder com
+      LPIPS + GAN leve (discriminador patch, hinge). Reporta os DOIS EIXOS: PSNR (cai) e nitidez
+      (laplaciano, sobe) — é o trade-off taxa-distorção-percepção (Blau&Michaeli), lei e não bug.
+      Diagnóstico do Leonardo estava certo: MSE devolve E[x|y] = MÉDIA das texturas plausíveis = "pincel".
+      NOTA: o M96 deles já tinha achado isso (GAN: PSNR 24.61→23.14 pior, mas nitidez +130.4%) e leu como
+      FALHA — era o trade-off aparecendo, medido no eixo errado. Casa com a tese "medimos no eixo do
+      adversário" [[insight_selector_not_generator]].
+ EXP5 estreito vs diverso (avaliados no MESMO held-out)
+VALIDADO localmente ponta a ponta em miniatura (CPU, dados sintéticos): 5 exps + GAN + visual + tabela
+final rodam sem erro; checkpoint/resume funciona; guards p/ AVIF e LPIPS ausentes. Estimativa Colab: ~650k
+passos ≈ 7-9h (~8 unidades das 70 dele).

@@ -60,6 +60,7 @@ Um preditor de bytes minúsculo num STREAM que MUDA de distribuição no meio:
 Se o hormonal se adapta mais rápido à troca, a economia hormonal ganha ONDE deve
 ganhar (mundo vivo). Se não, a ideia é bonita e morre — reportar assim.
 **RODADO (docs/HORMONE_POC.md):** a economia completa naive FALHOU (instável); o hormônio isolado metabolismo=esquecer AJUDA a adaptar (choque −0.002 vs +0.022) mas custa 0.15 bpb no estável. Trade-off honesto, ganho marginal.
+**TESTE 3 (scripts/hormone_poc2.py, multi-seed):** a ressalva "gateia ONDE, não a lr global" virou número. GATE LOCAL por-contexto ∈[0.1,1] CONSERTA o naive (instab 2.18→0.37, estável 5.34→3.32) e EMPATA o SGD (3.323 vs 3.328) — neuromodulação bem-feita é inócua, não vence o gradiente puro. Esquecer SELETIVO (só o já-aprendido) é o melhor trade-off: mesmo ganho de adaptação (choque +0.052 vs SGD +0.079) por ~1/3 do imposto (+0.056 vs +0.155). O design certo existe e é estável; ainda NÃO domina o SGD num stream só-metade-não-estacionário.
 
 ## A honestidade obrigatória (a lição do ecossistema)
 
